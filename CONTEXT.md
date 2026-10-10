@@ -62,3 +62,10 @@ _Avoid:_ heartbeat, ping, monitor.
 **reconcile** — the daily `chezmoi update` timer that catches drift. Its job
 is detection, not speed.
 _Avoid:_ sync, when reconcile is meant. **sync** is SnapRAID's parity update.
+
+**bootstrap** — the one-time pass that takes a finished install to a host
+chezmoi can configure: patches, chezmoi itself, Tailscale, one reboot.
+_Avoid:_ provision, setup.
+
+**apply** — running chezmoi over both source trees. Repeatable by hand, and
+what reconcile runs on a timer.

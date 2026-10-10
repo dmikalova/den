@@ -4,7 +4,10 @@
 // Usage:
 //
 //	den usb build [flags]
+//	den usb memtest [flags]
 //	den usb write --device /dev/diskN [flags]
+//	den bootstrap [flags]
+//	den apply [flags]
 //	den version
 //	den help
 package main
@@ -43,6 +46,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 0
 	case args[0] == "usb":
 		err = usb(ctx, args[1:], stdout, stderr)
+	case args[0] == "bootstrap":
+		err = bootstrapHost(ctx, args[1:], stdout, stderr)
+	case args[0] == "apply":
+		err = applyHost(ctx, args[1:], stdout, stderr)
 	default:
 		err = fmt.Errorf("unknown command %q: %w", args[0], errUsage)
 	}
@@ -62,7 +69,10 @@ func usage(w io.Writer) {
 
 Usage:
   den usb build [flags]              build an unattended install image
+  den usb memtest [flags]            fetch the memtest86+ image
   den usb write --device <node>      write an image to a removable disk
+  den bootstrap [flags]              patch a fresh install and install chezmoi
+  den apply [flags]                  run chezmoi over den's host layer
   den version
   den help
 

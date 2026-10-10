@@ -18,9 +18,35 @@ go install ./cmd/den/ && den version
 Build an unattended Ubuntu Server install image and write it to a USB drive:
 
 ```bash
-den usb build --iso ~/Downloads/ubuntu-26.04.1-live-server-amd64.iso
+den usb build
 diskutil list external
 sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskX
 ```
 
+The build downloads the Ubuntu ISO and verifies it against Canonical's signing
+key. Pass `--iso <path>` to use a copy you already have.
+
 See [docs/autoinstall.md](docs/autoinstall.md) for the full procedure.
+
+Build a memtest86+ stick, to test the memory before the box holds data:
+
+```bash
+den usb memtest
+sudo den usb write --image ~/Downloads/memtest86plus-8.10.iso --device /dev/diskX
+```
+
+See [docs/memtest.md](docs/memtest.md) for the full procedure.
+
+Configure the host once the install has finished:
+
+```bash
+den bootstrap
+ssh den sudo tailscale up --ssh
+den apply
+```
+
+`bootstrap` patches the fresh install and puts chezmoi and Tailscale on it.
+`apply` runs chezmoi over the two source trees in `chezmoi/`, and is safe to
+repeat.
+
+See [docs/bootstrap.md](docs/bootstrap.md) for the full procedure.

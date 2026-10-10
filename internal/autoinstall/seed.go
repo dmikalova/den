@@ -68,13 +68,16 @@ func (s Seed) UserData() ([]byte, error) {
 		return nil, err
 	}
 
-	funcs := template.FuncMap{"quote": func(v string) string {
-		out, err := yaml.Marshal(v)
-		if err != nil {
-			return ""
-		}
-		return string(bytes.TrimSpace(out))
-	}}
+	funcs := template.FuncMap{
+		"quote": func(v string) string {
+			out, err := yaml.Marshal(v)
+			if err != nil {
+				return ""
+			}
+			return string(bytes.TrimSpace(out))
+		},
+		"seedKey": func() string { return "/cdrom/" + SeedDir + "/" + KeyFile },
+	}
 	t, err := template.New("user-data.tmpl").Funcs(funcs).ParseFS(templates, "user-data.tmpl")
 	if err != nil {
 		return nil, err

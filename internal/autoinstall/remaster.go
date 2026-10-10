@@ -12,6 +12,11 @@ import (
 // ISO. Both the BIOS and the EFI loader read this one file.
 const grubPath = "/boot/grub/grub.cfg"
 
+// KeyFile holds the LUKS passphrase on its own inside the seed directory.
+// Subiquity redacts the passphrase from the copy of the seed it leaves on the
+// installed system, so the TPM enrollment cannot read it back from there.
+const KeyFile = "luks.key"
+
 // Remaster writes a copy of the source ISO that carries the seed and boots
 // straight into the install.
 //
@@ -118,6 +123,15 @@ func writeSeed(work string, seed Seed) (string, error) {
 		filepath.Join(dir, "meta-data"),
 		MetaData(seed.Hostname),
 		0o644,
+	); err != nil {
+		return "", err
+	}
+	// No trailing newline: systemd-cryptenroll --unlock-key-file takes the
+	// whole file as the passphrase.
+	if err := os.WriteFile(
+		filepath.Join(dir, KeyFile),
+		[]byte(seed.LUKSPassphrase),
+		0o600,
 	); err != nil {
 		return "", err
 	}

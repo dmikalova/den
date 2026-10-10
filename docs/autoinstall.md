@@ -85,6 +85,7 @@ The seed:
   LUKS2 volume with btrfs inside it.
 - Creates one account, with password login for the console and key-only
   login for SSH.
+- Sets the timezone to `America/Los_Angeles` and the time format to ISO 8601.
 - Installs `curl`, `git` and `gnupg`, then reboots.
 
 Nothing else is installed at this stage. Everything above the host layer
@@ -115,18 +116,135 @@ anywhere else Subiquity raises `NotFinalPartitionError`.
 curtin on its own has no such form, so testing this config against bare curtin
 gives a false failure.
 
-> **Unverified:** the btrfs and LUKS storage stanza has not been run end to
-> end. Confirm the result on first boot.
+### Locale and time
+
+The seed sets `timezone: America/Los_Angeles`. Left unset, Subiquity derives
+the zone from a geoip lookup, which makes the result depend on the network the
+install ran on.
+
+Autoinstall has one `locale` key and no key for the time format, so the 24
+hour clock and ISO 8601 dates come from `LC_TIME=en_DK.UTF-8`, written by a
+late-command. Only `LC_TIME` is taken from `en_DK`, so messages stay in
+English. The setting lands in `/etc/default/locale`, which PAM reads for every
+login shell including root. This is machine state, not user state, so chezmoi
+does not own it.
+
+Journal timestamps are not affected either way. `journalctl` prints its own
+format, which ignores the locale.
+
+### Install speed
+
+`updates: security` is the Subiquity default and the smallest setting it
+offers; there is no way to install zero updates. Everything beyond that is
+deferred to chezmoi on first boot.
+
+Three keys cut install-time work:
+
+- `apt.mirror-selection.primary` names one mirror. The default is a candidate
+  list that the installer probes one at a time.
+- `apt.geoip: false` stops the country-mirror lookup from choosing the
+  mirror. It does not stop the request itself, which Subiquity makes for other
+  reasons.
+- `kernel-crash-dumps.enabled: false`. From 24.10 the default enables kdump on
+  any machine that qualifies, which installs `kdump-tools` and reserves RAM
+  for a crash kernel on every boot.
+
+### Subvolume layout
+
+curtin has no subvolume action. The storage schema stops at `format`, and
+`fstype: btrfs` only works because curtin falls through to `mkfs.btrfs` for
+filesystems it does not know. So curtin lays the tree down at the top level of
+the filesystem and the last late-command rebuilds it:
+
+| Subvolume | Mount   | Why                                              |
+| --------- | ------- | ------------------------------------------------ |
+| `@`       | `/`     | lets a snapshot be rolled back at boot time      |
+| `@swap`   | `/swap` | a swapfile blocks snapshots of its own subvolume |
+
+The move into `@` is a `btrfs subvolume snapshot`, not a copy. It rewrites
+metadata only, so it is quick and cannot lose ownership or extended
+attributes. The initramfs then finds `@` because the late-command makes it the
+default subvolume; the kernel command line carries no `rootflags`.
+
+The late-command leaves the original tree at the top level. It shares every
+extent with `@`, so it costs almost nothing at first, and it is a working
+fallback if the new layout does not boot. Delete it by hand once the host
+comes up (see First boot), because it does start to cost real space as `@`
+diverges from it.
 
 ## First boot
 
 The host comes up on DHCP and asks for the LUKS passphrase on the console.
 Enter it once. The TPM takes over from the second boot.
 
-1. Confirm the TPM enrolled itself. `den-tpm-enroll.service` runs once on the
+1. Reach the host over SSH. The installer runs `avahi-daemon`, so the host
+   answers to its hostname on the local network and you do not have to hunt
+   for the address:
+
+   ```sh
+   ping -c1 den.local
+   ssh -i ~/.ssh/id_dmikalova -o IdentitiesOnly=yes dmikalova@den.local
+   ```
+
+   `IdentitiesOnly=yes` stops the agent from offering every key it holds.
+   The server takes one key and refuses passwords, so without this flag a
+   refusal does not tell you which key failed.
+
+   If mDNS does not answer, find the address from the console with
+   `ip -4 -br addr show scope global`, or sweep the subnet from the Mac with
+   `nmap -sn 192.168.0.0/24`. The router's DHCP lease table also shows the
+   hostname the host claimed.
+
+   SSH asks you to accept a host key the first time. Read the real
+   fingerprint off the console first and compare:
+
+   ```sh
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+   Confirm the install touched one disk only. The four data drives must still
+   be empty:
+
+   ```sh
+   lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+   systemctl --failed
+   ```
+
+   Confirm the subvolume layout took. `findmnt` has to report `subvol=/@`,
+   and swap has to come from `/swap/swapfile`:
+
+   ```sh
+   sudo btrfs subvolume list /
+   findmnt -no SOURCE,FSTYPE,OPTIONS /
+   swapon --show
+   ```
+
+   Confirm the clock. `timedatectl` has to report `America/Los_Angeles` with
+   NTP active, and `date` has to print a 24 hour time:
+
+   ```sh
+   timedatectl
+   locale | grep LC_TIME
+   date
+   ```
+
+   The installer leaves the pre-subvolume tree at the top level as a
+   fallback. Once the host boots from `@` and the TPM has enrolled, delete
+   it:
+
+   ```sh
+   sudo mkdir -p /mnt/top
+   sudo mount -o subvolid=5 /dev/mapper/den-root /mnt/top
+   ls /mnt/top                     # expect @, @swap, and the stale tree
+   sudo find /mnt/top -mindepth 1 -maxdepth 1 \
+     ! -name @ ! -name @swap -exec rm -rf {} +
+   sudo umount /mnt/top && sudo rmdir /mnt/top
+   ```
+
+2. Confirm the TPM enrolled itself. `den-tpm-enroll.service` runs once on the
    first boot, binds a key slot to PCR 7, adds `tpm2-device=auto` to
-   `/etc/crypttab`, rebuilds the initramfs, and shreds the seed that curtin
-   left in `/var/log/installer/autoinstall-user-data`.
+   `/etc/crypttab`, rebuilds the initramfs, and shreds the passphrase that the
+   installer left in `/etc/den/luks.key`.
 
    ```sh
    systemctl status den-tpm-enroll.service
@@ -138,17 +256,21 @@ Enter it once. The TPM takes over from the second boot.
    boot scripts do not understand can leave the root volume unopenable. Both
    cases are logged and leave the passphrase as the only unlock.
 
+   An unexpected failure leaves the unit enabled and the key file in place, so
+   the next boot tries again. Only a decided outcome shreds the key and
+   disables the unit.
+
    Reboot and confirm it comes up with no prompt. **Keep the passphrase in
    Bitwarden.** A firmware update changes PCR 7 and you will need it.
 
-2. Install Tailscale and join the tailnet:
+3. Install Tailscale and join the tailnet:
 
    ```sh
    curl -fsSL https://tailscale.com/install.sh | sh
    sudo tailscale up --ssh
    ```
 
-3. Put the age key in place. Copy it from Bitwarden:
+4. Put the age key in place. Copy it from Bitwarden:
 
    ```sh
    sudo install -d -m 700 /var/lib/sops/age
@@ -156,13 +278,13 @@ Enter it once. The TPM takes over from the second boot.
    sudo chmod 600 /var/lib/sops/age/keys.txt
    ```
 
-4. Apply the host config:
+5. Apply the host config:
 
    ```sh
    sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply dmikalova/den
    ```
 
-5. Confirm the host can reach you:
+6. Confirm the host can reach you:
 
    ```sh
    den notify --level ok --title bootstrap

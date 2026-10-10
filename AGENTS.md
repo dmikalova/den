@@ -13,6 +13,10 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | ---------------------- | -------------------------------------------------------- |
 | `cmd/den`              | The command line: `usb`, and the operational subcommands |
 | `internal/autoinstall` | The Subiquity seed: user-data, GRUB patch, ISO remaster  |
+| `internal/bootstrap`   | The two passes that configure a freshly installed den    |
+| `internal/fetch`       | Downloading a file over HTTP and checking its sum        |
+| `internal/memtest`     | Fetching the memtest86+ boot image                       |
+| `internal/remote`      | Running a script on den over ssh                         |
 | `internal/usbdisk`     | Finding a removable disk and writing an image to it      |
 
 ## Rules
@@ -31,3 +35,9 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 
 `den usb write` refuses an internal disk and requires `--yes`. Do not add a
 flag that removes that check.
+
+## Reaching den
+
+`internal/remote` shells out to the `ssh` binary so the operator's ssh config,
+agent and known_hosts apply. Do not replace it with an ssh library: that moves
+host key verification into den, and the usual next step is disabling it.

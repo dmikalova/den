@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dmikalova/den/internal/autoinstall"
+	"github.com/dmikalova/den/internal/memtest"
 	"github.com/dmikalova/den/internal/progress"
 	"github.com/dmikalova/den/internal/secrets"
 	"github.com/dmikalova/den/internal/usbdisk"
@@ -25,11 +26,13 @@ const defaultSecrets = "secrets/install.sops.json"
 
 func usb(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usb needs a subcommand, build or write: %w", errUsage)
+		return fmt.Errorf("usb needs a subcommand, build, memtest or write: %w", errUsage)
 	}
 	switch args[0] {
 	case "build":
 		return usbBuild(ctx, args[1:], stdout)
+	case "memtest":
+		return usbMemtest(ctx, args[1:], stdout)
 	case "write":
 		return usbWrite(ctx, args[1:], stdout, stderr)
 	default:
@@ -96,6 +99,8 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
+	} else if _, err := os.Stat(src); err != nil {
+		return fmt.Errorf("%w: drop --iso and den downloads the ISO itself", err)
 	} else if err := autoinstall.VerifyISO(ctx, src, *release); err != nil {
 		return err
 	}
@@ -110,6 +115,34 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 		"image   %s\n\nWrite it with:\n  sudo den usb write --image %s --device /dev/diskN --yes\n",
 		*out,
 		*out,
+	)
+	return nil
+}
+
+// usbMemtest fetches the memory test image. It is a separate stick from the
+// install image: the test has to run before the installer writes anything.
+func usbMemtest(ctx context.Context, args []string, stdout io.Writer) error {
+	fs := flag.NewFlagSet("den usb memtest", flag.ContinueOnError)
+	var (
+		version = fs.String("version", memtest.DefaultVersion, "memtest86+ release")
+		cache   = fs.String("cache", defaultCache(), "where downloaded images are kept")
+	)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(stdout, "fetching memtest86+ %s\n", *version)
+	p := progress.New(stdout, "download")
+	image, err := memtest.Fetch(ctx, *version, *cache, p.Update)
+	p.Done()
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(
+		stdout,
+		"image   %s\n\nWrite it with:\n  sudo den usb write --image %s --device /dev/diskN --yes\n",
+		image,
+		image,
 	)
 	return nil
 }

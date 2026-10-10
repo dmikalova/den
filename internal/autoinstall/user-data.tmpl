@@ -6,9 +6,21 @@
 # drives must never be candidates. Any change here is a review stop.
 autoinstall:
   version: 1
+  # Autoinstall takes one locale. LC_TIME is overridden in a late-command.
   locale: en_US.UTF-8
   keyboard:
     layout: us
+  timezone: America/Los_Angeles
+  updates: security
+  # Otherwise 26.04 sizes and reserves a crash kernel out of the 64G.
+  kernel-crash-dumps:
+    enabled: false
+  apt:
+    # One named mirror, so the installer has no candidate list to probe.
+    mirror-selection:
+      primary:
+        - uri: http://us.archive.ubuntu.com/ubuntu
+    geoip: false
   network:
     network:
       version: 2
@@ -91,10 +103,10 @@ autoinstall:
       - {{ . | quote }}
 {{- end }}
   packages:
+    - avahi-daemon
     - curl
     - git
     - gnupg
-    - python3-yaml
     - systemd-cryptsetup
     - tpm2-tools
   # Enrolling the TPM here would seal to PCR 7 as the installer's own boot
@@ -105,14 +117,16 @@ autoinstall:
       #!/bin/bash
       set -euo pipefail
 
-      seed=/var/log/installer/autoinstall-user-data
+      key=/etc/den/luks.key
 
-      # Run once whatever happens. A unit that retries every boot against a
-      # TPM that will never work just burns the dictionary attack counter.
-      trap 'systemctl disable den-tpm-enroll.service' EXIT
+      # Stay enabled after an unexpected failure so the next boot retries and
+      # the journal keeps a record. Only a decided outcome turns it off, and
+      # the key file survives until enrollment actually succeeds.
+      done_with_it() { shred -u "$key" 2>/dev/null || true; systemctl disable den-tpm-enroll.service; }
 
       if [ ! -e /dev/tpmrm0 ]; then
         echo "no TPM: the passphrase stays the only way in"
+        done_with_it
         exit 0
       fi
 
@@ -120,6 +134,13 @@ autoinstall:
       # confirm the initramfs understands one before writing it.
       if ! lsinitramfs "/boot/initrd.img-$(uname -r)" | grep -q systemd-cryptsetup; then
         echo "this initramfs cannot unlock with a TPM: leaving crypttab alone"
+        done_with_it
+        exit 0
+      fi
+
+      if [ ! -s "$key" ]; then
+        echo "no passphrase at $key: cannot enroll"
+        done_with_it
         exit 0
       fi
 
@@ -128,16 +149,6 @@ autoinstall:
         UUID=*) dev=/dev/disk/by-uuid/${src#UUID=} ;;
         *) dev=$src ;;
       esac
-
-      key=$(mktemp)
-      chmod 0600 "$key"
-      trap 'shred -u "$key" 2>/dev/null || true; systemctl disable den-tpm-enroll.service' EXIT
-
-      # Read the passphrase back out of the seed rather than keeping a second
-      # copy of it on disk.
-      python3 -c 'import sys, yaml
-      cfg = yaml.safe_load(open(sys.argv[1]))["autoinstall"]["storage"]["config"]
-      print(next(e["key"] for e in cfg if e["type"] == "dm_crypt"), end="")' "$seed" > "$key"
 
       systemd-cryptenroll --unlock-key-file="$key" \
         --tpm2-device=auto --tpm2-pcrs=7 "$dev"
@@ -149,15 +160,17 @@ autoinstall:
       mv /etc/crypttab.new /etc/crypttab
       update-initramfs -u
 
-      shred -u "$seed"
+      done_with_it
       echo "TPM enrolled: the passphrase is now the recovery path only"
       SCRIPT
     - chmod 0755 /target/usr/local/sbin/den-tpm-enroll
+    - install -d -m 0700 /target/etc/den
+    - install -m 0600 {{ seedKey }} /target/etc/den/luks.key
     - |
       cat > /target/etc/systemd/system/den-tpm-enroll.service <<'UNIT'
       [Unit]
       Description=Enroll the TPM to unlock the root volume
-      ConditionPathExists=/var/log/installer/autoinstall-user-data
+      ConditionPathExists=/etc/den/luks.key
 
       [Service]
       Type=oneshot
@@ -168,4 +181,71 @@ autoinstall:
       WantedBy=multi-user.target
       UNIT
     - curtin in-target --target=/target -- systemctl enable den-tpm-enroll.service
+    - install -d -m 0755 /target/etc/default/grub.d
+    - |
+      cat > /target/etc/default/grub.d/99-den.cfg <<'CFG'
+      # The 30 second wait is GRUB_RECORDFAIL_TIMEOUT, which applies whenever
+      # the previous boot did not clear the recordfail flag.
+      GRUB_TIMEOUT=2
+      GRUB_TIMEOUT_STYLE=menu
+      GRUB_RECORDFAIL_TIMEOUT=2
+
+      # The ASM1166 reports 32 ports but has 6. Without the mask the kernel
+      # probes all 32 and boot takes minutes. Masking only hides ports behind
+      # a SATA port multiplier, which this build deliberately has none of.
+      # Appended, so Ubuntu's own default flags survive.
+      GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT ahci.mask_port_map=0x3f"
+      CFG
+    - curtin in-target --target=/target -- update-grub
+    # en_DK is the ISO 8601 locale: 24 hour clock and YYYY-MM-DD dates. Only
+    # LC_TIME is taken from it, so messages stay in English.
+    - curtin in-target --target=/target -- locale-gen en_US.UTF-8 en_DK.UTF-8
+    - curtin in-target --target=/target -- update-locale LC_TIME=en_DK.UTF-8
+    # curtin has no subvolume action, so the layout is rebuilt here. This must
+    # stay the last late-command: it reads the finished tree out of /target.
+    - |
+      cat > /tmp/den-subvols <<'SCRIPT'
+      #!/bin/bash
+      set -euo pipefail
+
+      # Work through a second mount of the top level. /target has /boot and the
+      # pseudo-filesystems mounted over it, and those must not be touched.
+      top=/tmp/den-btrfs-top
+      dev=$(findmnt -no SOURCE /target)
+      mkdir -p "$top"
+      mount -o subvolid=5 "$dev" "$top"
+
+      # btrfs refuses to snapshot a subvolume holding a swapfile, so curtin's
+      # own swapfile goes before the snapshot and comes back in @swap.
+      rm -f "$top/swap.img"
+
+      # A snapshot moves the tree into @ by metadata alone, with no copy and
+      # no chance of losing ownership or extended attributes along the way.
+      btrfs subvolume snapshot "$top" "$top/@"
+
+      btrfs subvolume create "$top/@swap"
+      chattr +C "$top/@swap"
+      btrfs filesystem mkswapfile --size 8g "$top/@swap/swapfile"
+
+      # The initramfs mounts whatever the default subvolume is, because the
+      # kernel command line carries no rootflags.
+      btrfs subvolume set-default "$top/@"
+
+      mkdir -p "$top/@/swap"
+
+      fstab=$top/@/etc/fstab
+      awk '
+        $2 == "/" && $3 == "btrfs" { rootspec = $1; $4 = $4 ",subvol=@" }
+        $1 == "/swap.img" { next }
+        { print }
+        END {
+          print rootspec, "/swap", "btrfs", "defaults,subvol=@swap", 0, 0
+          print "/swap/swapfile", "none", "swap", "sw", 0, 0
+        }
+      ' "$fstab" > "$fstab.new"
+      mv "$fstab.new" "$fstab"
+
+      umount "$top"
+      SCRIPT
+      bash /tmp/den-subvols
   shutdown: reboot

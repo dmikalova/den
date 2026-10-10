@@ -3,15 +3,13 @@ package autoinstall
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/dmikalova/den/internal/fetch"
 )
 
 // releasesURL is where Canonical publishes the Server ISO, its checksums and
@@ -45,7 +43,7 @@ func Fetch(
 		{base + "/SHA256SUMS", sums},
 		{base + "/SHA256SUMS.gpg", sig},
 	} {
-		if err := download(ctx, f.url, f.path, nil); err != nil {
+		if err := fetch.Download(ctx, f.url, f.path, nil); err != nil {
 			return "", err
 		}
 	}
@@ -57,14 +55,14 @@ func Fetch(
 	if err != nil {
 		return "", err
 	}
-	if got, err := fileSum(iso); err == nil && got == want {
+	if got, err := fetch.SHA256(iso); err == nil && got == want {
 		return iso, nil
 	}
-	if err := download(ctx, base+"/"+ISOName(release), iso, onProgress); err != nil {
+	if err := fetch.Download(ctx, base+"/"+ISOName(release), iso, onProgress); err != nil {
 		return "", err
 	}
 
-	got, err := fileSum(iso)
+	got, err := fetch.SHA256(iso)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +89,7 @@ func VerifyISO(ctx context.Context, isoPath, release string) error {
 		{base + "/SHA256SUMS", sums},
 		{base + "/SHA256SUMS.gpg", sig},
 	} {
-		if err := download(ctx, f.url, f.path, nil); err != nil {
+		if err := fetch.Download(ctx, f.url, f.path, nil); err != nil {
 			return err
 		}
 	}
@@ -103,7 +101,7 @@ func VerifyISO(ctx context.Context, isoPath, release string) error {
 	if err != nil {
 		return err
 	}
-	got, err := fileSum(isoPath)
+	got, err := fetch.SHA256(isoPath)
 	if err != nil {
 		return err
 	}
@@ -151,70 +149,4 @@ func sumFor(sums, name string) (string, error) {
 		return "", err
 	}
 	return "", fmt.Errorf("%s is not listed in %s: check the release number", name, sums)
-}
-
-func fileSum(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-
-	h := sha256.New()
-	if _, err := f.WriteTo(h); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// download writes url to path, through a temporary file so an interrupted
-// transfer never looks like a complete one.
-func download(ctx context.Context, url, path string, onProgress func(done, total int64)) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".download-*")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.Remove(tmp.Name()) }()
-
-	var src io.Reader = resp.Body
-	if onProgress != nil {
-		src = &countingReader{r: resp.Body, total: resp.ContentLength, fn: onProgress}
-	}
-	if _, err := tmp.ReadFrom(src); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
-}
-
-// countingReader reports how much has been read. total is -1 when the server
-// sends no Content-Length.
-type countingReader struct {
-	r     io.Reader
-	total int64
-	done  int64
-	fn    func(done, total int64)
-}
-
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	c.done += int64(n)
-	c.fn(c.done, c.total)
-	return n, err
 }
