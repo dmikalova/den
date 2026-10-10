@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dmikalova/project-standards/main/schema/mklv.config.schema.json",
+  "name": "den",
+  "entrypoint": "cmd/den/main.go",
+  "kind": "cli",
+  "ignore": {
+    "git": [
+      "/bin/",
+      "/build/",
+      "coverage.*",
+      "/den"
+    ]
+  }
+}

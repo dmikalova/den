@@ -1,0 +1,171 @@
+#cloud-config
+# The Subiquity seed for den. `den usb build` renders this and puts it on the
+# install image. Secrets are injected at build time, never stored here.
+#
+# WARNING: the storage stanza pins the install to the NVMe. The four hard
+# drives must never be candidates. Any change here is a review stop.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  network:
+    network:
+      version: 2
+      ethernets:
+        all-en:
+          match:
+            name: "en*"
+          dhcp4: true
+  storage:
+    config:
+      - type: disk
+        id: nvme
+        path: /dev/nvme0n1
+        ptable: gpt
+        wipe: superblock-recursive
+        preserve: false
+      - type: partition
+        id: esp
+        device: nvme
+        number: 1
+        size: 1G
+        flag: boot
+        grub_device: true
+      # /boot stays outside LUKS. GRUB has to read the kernel before anything
+      # is unlocked, and Ubuntu's GRUB cannot open a LUKS2 argon2id header.
+      - type: partition
+        id: boot
+        device: nvme
+        number: 2
+        size: 2G
+      # Subiquity resolves a negative size to the rest of the disk, but only
+      # on the last partition. curtin itself has no such form, so this must
+      # stay the final entry.
+      - type: partition
+        id: root-part
+        device: nvme
+        number: 3
+        size: -1
+      # curtin takes the passphrase only in clear, and copies the seed onto
+      # the installed system. Wipe the USB stick after the install.
+      - type: dm_crypt
+        id: root-crypt
+        dm_name: den-root
+        volume: root-part
+        key: {{ .LUKSPassphrase | quote }}
+      - type: format
+        id: esp-fs
+        volume: esp
+        fstype: fat32
+      - type: format
+        id: boot-fs
+        volume: boot
+        fstype: ext4
+      - type: format
+        id: root-fs
+        volume: root-crypt
+        fstype: btrfs
+      - type: mount
+        id: root-mount
+        device: root-fs
+        path: /
+      - type: mount
+        id: boot-mount
+        device: boot-fs
+        path: /boot
+      - type: mount
+        id: esp-mount
+        device: esp-fs
+        path: /boot/efi
+  identity:
+    hostname: {{ .Hostname }}
+    realname: {{ .Username }}
+    username: {{ .Username }}
+    password: {{ .PasswordHash | quote }}
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+{{- range .AuthorizedKeys }}
+      - {{ . | quote }}
+{{- end }}
+  packages:
+    - curl
+    - git
+    - gnupg
+    - python3-yaml
+    - systemd-cryptsetup
+    - tpm2-tools
+  # Enrolling the TPM here would seal to PCR 7 as the installer's own boot
+  # chain measured it, so the work is deferred to the installed system.
+  late-commands:
+    - |
+      cat > /target/usr/local/sbin/den-tpm-enroll <<'SCRIPT'
+      #!/bin/bash
+      set -euo pipefail
+
+      seed=/var/log/installer/autoinstall-user-data
+
+      # Run once whatever happens. A unit that retries every boot against a
+      # TPM that will never work just burns the dictionary attack counter.
+      trap 'systemctl disable den-tpm-enroll.service' EXIT
+
+      if [ ! -e /dev/tpmrm0 ]; then
+        echo "no TPM: the passphrase stays the only way in"
+        exit 0
+      fi
+
+      # An unknown crypttab option can leave the root volume unopenable, so
+      # confirm the initramfs understands one before writing it.
+      if ! lsinitramfs "/boot/initrd.img-$(uname -r)" | grep -q systemd-cryptsetup; then
+        echo "this initramfs cannot unlock with a TPM: leaving crypttab alone"
+        exit 0
+      fi
+
+      src=$(awk '!/^#/ && NF {print $2; exit}' /etc/crypttab)
+      case "$src" in
+        UUID=*) dev=/dev/disk/by-uuid/${src#UUID=} ;;
+        *) dev=$src ;;
+      esac
+
+      key=$(mktemp)
+      chmod 0600 "$key"
+      trap 'shred -u "$key" 2>/dev/null || true; systemctl disable den-tpm-enroll.service' EXIT
+
+      # Read the passphrase back out of the seed rather than keeping a second
+      # copy of it on disk.
+      python3 -c 'import sys, yaml
+      cfg = yaml.safe_load(open(sys.argv[1]))["autoinstall"]["storage"]["config"]
+      print(next(e["key"] for e in cfg if e["type"] == "dm_crypt"), end="")' "$seed" > "$key"
+
+      systemd-cryptenroll --unlock-key-file="$key" \
+        --tpm2-device=auto --tpm2-pcrs=7 "$dev"
+
+      awk '/^#/ || NF == 0 { print; next }
+           $0 ~ /tpm2-device=/ { print; next }
+           { $4 = (NF < 4 || $4 == "none") ? "tpm2-device=auto" : $4 ",tpm2-device=auto"; print }' \
+        /etc/crypttab > /etc/crypttab.new
+      mv /etc/crypttab.new /etc/crypttab
+      update-initramfs -u
+
+      shred -u "$seed"
+      echo "TPM enrolled: the passphrase is now the recovery path only"
+      SCRIPT
+    - chmod 0755 /target/usr/local/sbin/den-tpm-enroll
+    - |
+      cat > /target/etc/systemd/system/den-tpm-enroll.service <<'UNIT'
+      [Unit]
+      Description=Enroll the TPM to unlock the root volume
+      ConditionPathExists=/var/log/installer/autoinstall-user-data
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/den-tpm-enroll
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+    - curtin in-target --target=/target -- systemctl enable den-tpm-enroll.service
+  shutdown: reboot
