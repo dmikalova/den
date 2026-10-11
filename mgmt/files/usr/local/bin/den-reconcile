@@ -5,4 +5,4 @@
 set -euo pipefail
 runuser -u dmikalova -- git -C /srv/den-config pull --ff-only
 cd /srv/den-config/mgmt
-exec mgmt run --converger-timeout 5 --converged-exit lang metadata.yaml
+exec mgmt run --converger-timeout 5 --converged-exit lang ./metadata.yaml

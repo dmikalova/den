@@ -1,7 +1,7 @@
 # The root layer
 
 `den apply` runs
-`mgmt run --converger-timeout 5 --converged-exit lang metadata.yaml` on den, as
+`mgmt run --converger-timeout 5 --converged-exit lang ./metadata.yaml` on den, as
 root, from a clone of this repo at `/srv/den-config`.
 
 `main.mcl` is the root layer. `metadata.yaml` is the entrypoint only because a
