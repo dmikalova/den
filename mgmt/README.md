@@ -1,8 +1,12 @@
 # The root layer
 
 `den apply` runs
-`mgmt run --converger-timeout 30 --converged-exit lang ./metadata.yaml` on den,
-as root, from a clone of this repo at `/srv/den-config`.
+`mgmt run --no-autoedges --converger-timeout 30 --converged-exit lang ./metadata.yaml`
+on den, as root, from a clone of this repo at `/srv/den-config`.
+
+`--no-autoedges` is mandatory. Auto-edge computation outlasts the converger's
+quiescence window, so without the flag mgmt exits before applying anything and
+still reports success.
 
 `main.mcl` is the root layer. `metadata.yaml` is the entrypoint only because a
 naked `.mcl` file cannot see `files/`.

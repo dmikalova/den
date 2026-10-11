@@ -5,9 +5,13 @@
 set -euo pipefail
 runuser -u dmikalova -- git -C /srv/den-config pull --ff-only
 cd /srv/den-config/mgmt
+# --no-autoedges is not an optimisation, it is required. Auto-edge computation
+# on this graph runs for minutes, and the converger counts that time as idle, so
+# --converged-exit fires before a single resource is applied. The run then exits
+# 0 having changed nothing. bootstrap.go has always passed the flag; this script
+# did not, which is why scheduled reconciles silently skipped work.
+#
 # --converger-timeout is a quiescence window, not a per-resource deadline: mgmt
-# exits once the whole graph has been still for this many seconds. Anything the
-# engine has not materialised by then is simply never applied, and the run still
-# reports success. 5s was short enough to drop a package. 30s costs 25 extra
-# seconds on an idle run and buys a wide margin.
-exec mgmt run --converger-timeout 30 --converged-exit lang ./metadata.yaml
+# exits once the whole graph has been still for this many seconds. 30s costs 25
+# extra seconds on an idle run and buys a margin against the same class of bug.
+exec mgmt run --no-autoedges --converger-timeout 30 --converged-exit lang ./metadata.yaml
