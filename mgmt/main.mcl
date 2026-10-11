@@ -25,6 +25,11 @@ pkg [
 ] {
 	state => "installed",
 	allowunsupported => os.is_family_debian() ?: true,
+
+	# systemd's apt-daily.timer can hold the apt lock when this runs, and
+	# PackageKit cannot wait for it. apt-daily finishes in seconds, so retry.
+	Meta:retry => 3,
+	Meta:delay => 15000,
 }
 
 # Sentinels for the exec resources below, which change state that is not a file.
@@ -121,15 +126,10 @@ exec "enable-linger" {
 
 # Enrolment is den apply's last step, not this one: the key cannot live in a
 # public repo. This only installs the package.
-# Depend because this script runs apt and the pkg group runs PackageKit. Both
-# want the apt lock, PackageKit cannot wait for it, and with autoedges off
-# nothing else orders them.
 exec "tailscale-v1" {
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
-
-	Depend => Pkg["unattended-upgrades"],
 }
 
 # Drives idle down on their own; smartd is what notices one dying first.
