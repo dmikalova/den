@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/dmikalova/den/internal/bootstrap"
 	"github.com/dmikalova/den/internal/remote"
@@ -94,16 +95,49 @@ func (f hostFlags) split(stdout, stderr io.Writer) (remote.Host, bootstrap.Optio
 // not fatal: converging matters more than enrolling, and the join step guards
 // itself anyway. Dry runs never reach gcloud, because the script they print
 // would contain the key.
-func (f hostFlags) tailnetKey(ctx context.Context, dryRun bool, stderr io.Writer) string {
+//
+// gcloud can stall here while it refreshes credentials, so this announces
+// itself first rather than leaving the run looking hung.
+func (f hostFlags) tailnetKey(ctx context.Context, dryRun bool, stdout, stderr io.Writer) string {
 	if dryRun {
 		return "REDACTED"
 	}
+	if _, err := fmt.Fprintf(stdout, "reading %s from %s\n", *f.tsKey, *f.project); err != nil {
+		return ""
+	}
+	// Bounded because the join is optional and gcloud can block for a long
+	// time on a credential or network problem. Converging still matters.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	start := time.Now()
 	key, err := secrets.Access(ctx, *f.project, *f.tsKey)
 	if err != nil {
+		if ctx.Err() != nil {
+			err = fmt.Errorf("gcloud did not answer within 30s: %w", err)
+		}
 		_, _ = fmt.Fprintf(stderr, "skipping the tailnet join: %v\n", err)
 		return ""
 	}
+	if _, err := fmt.Fprintf(
+		stdout,
+		"done in %s\n",
+		time.Since(start).Round(time.Second),
+	); err != nil {
+		return ""
+	}
 	return key
+}
+
+// mode names a run that is not a real one, so a report-only run cannot be
+// mistaken for a converge that did nothing.
+func mode(dryRun, noop bool) string {
+	switch {
+	case dryRun:
+		return " (dry run, nothing is contacted)"
+	case noop:
+		return " (noop, changes are reported but not made)"
+	}
+	return ""
 }
 
 // localTerminfo describes the terminal den is being driven from, so the server
@@ -149,7 +183,15 @@ func applyHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		return err
 	}
 	h, o := f.split(stdout, stderr)
-	o.TailscaleKey = f.tailnetKey(ctx, h.DryRun, stderr)
+	if _, err := fmt.Fprintf(
+		stdout,
+		"applying to %s%s\n",
+		h.Addr,
+		mode(h.DryRun, o.Noop),
+	); err != nil {
+		return err
+	}
+	o.TailscaleKey = f.tailnetKey(ctx, h.DryRun, stdout, stderr)
 
 	if err := bootstrap.Run(ctx, h, bootstrap.Apply(o), stdout); err != nil {
 		return err

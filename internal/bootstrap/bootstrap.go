@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/dmikalova/den/internal/remote"
 )
@@ -125,6 +126,9 @@ func Run(ctx context.Context, h remote.Host, steps []Step, log io.Writer) error 
 		if s.Root {
 			run = h.RunRoot
 		}
+		// Timed because the steps are opaque while they run: mgmt alone can
+		// sit silent for minutes, and without this there is nothing to blame.
+		start := time.Now()
 		if err := run(ctx, s.Script); err != nil {
 			return fmt.Errorf("%s: %w", s.Name, err)
 		}
@@ -132,6 +136,13 @@ func Run(ctx context.Context, h remote.Host, steps []Step, log io.Writer) error 
 			if err := h.Wait(ctx); err != nil {
 				return fmt.Errorf("%s: %w", s.Name, err)
 			}
+		}
+		if _, err := fmt.Fprintf(
+			log,
+			"done in %s\n",
+			time.Since(start).Round(time.Second),
+		); err != nil {
+			return err
 		}
 	}
 	return nil

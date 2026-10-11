@@ -33,8 +33,11 @@ func Access(ctx context.Context, project, name string) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("reading secret %s: %w: %s",
-			name, err, strings.TrimSpace(stderr.String()))
+		// gcloud says why in stderr, so losing it leaves only "exit status 1".
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", fmt.Errorf("reading secret %s: %w\n%s", name, err, msg)
+		}
+		return "", fmt.Errorf("reading secret %s: %w", name, err)
 	}
 	return string(bytes.TrimSpace(out)), nil
 }
