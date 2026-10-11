@@ -257,7 +257,7 @@ git -C "$dir" --no-pager log -1 --oneline
 const runMgmt = `set -euo pipefail
 cd %s/mgmt
 timeout --signal=INT --kill-after=30s 30m \
-  mgmt run --no-autoedges --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
+  mgmt run --no-autoedges --converger-timeout 30 --converged-exit%s lang ./metadata.yaml
 `
 
 // joinTailnet enrols den once, after the converge step that installs the
