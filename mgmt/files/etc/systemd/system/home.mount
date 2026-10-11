@@ -1,0 +1,13 @@
+[Unit]
+Description=/home on the @home subvolume
+# Without its own subvolume /home rides along with a snapper rollback of /.
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/home
+Type=btrfs
+Options=defaults,subvol=@home
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Service configuration on the @appdata subvolume
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/srv/appdata
+Type=btrfs
+Options=defaults,subvol=@appdata
+
+[Install]
+WantedBy=local-fs.target

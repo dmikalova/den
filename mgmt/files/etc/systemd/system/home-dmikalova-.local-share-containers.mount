@@ -1,0 +1,15 @@
+[Unit]
+Description=Container image and layer store on the @containers subvolume
+# Never snapshotted: nested subvolumes do not recurse, and image layers are
+# re-pullable rather than worth keeping history for.
+Before=local-fs.target
+RequiresMountsFor=/home
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/home/dmikalova/.local/share/containers
+Type=btrfs
+Options=defaults,subvol=@containers
+
+[Install]
+WantedBy=local-fs.target

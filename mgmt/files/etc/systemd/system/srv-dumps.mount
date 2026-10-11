@@ -1,0 +1,12 @@
+[Unit]
+Description=Database dumps on the @dumps subvolume
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/srv/dumps
+Type=btrfs
+Options=defaults,subvol=@dumps
+
+[Install]
+WantedBy=local-fs.target

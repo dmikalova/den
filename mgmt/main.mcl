@@ -14,12 +14,17 @@ import "os"
 # that should be a container has leaked into the host.
 pkg [
 	"btrfs-progs",
+	"fuse-overlayfs",
 	"mergerfs",
 	"ncurses-term",
+	"passt",
+	"podman",
+	"rsync",
 	"smartmontools",
 	"snapper",
 	"snapraid",
 	"systemd-zram-generator",
+	"uidmap",
 	"ufw",
 	"unattended-upgrades",
 ] {
@@ -75,6 +80,22 @@ file "/etc/sysctl.d/99-den-swap.conf" {
 	mode => "0644",
 }
 
+file "/etc/sysctl.d/99-den-rootless.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/sysctl.d/99-den-rootless.conf"),
+	mode => "0644",
+}
+
+# sysctl.d is read at boot, so a new file changes nothing on a running system.
+# Bump the sentinel after editing either file to apply it without a reboot.
+exec "sysctl-reload-v1" {
+	cmd => "sysctl --system >/dev/null && touch /var/lib/den/sysctl-reload-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/sysctl-reload-v1",
+
+	Depend => File["/etc/sysctl.d/99-den-rootless.conf"],
+}
+
 # GRUB's stock recordfail pause is 30 seconds, which a headless box spends
 # waiting for a keystroke nobody is there to press.
 #
@@ -122,6 +143,61 @@ exec "enable-linger" {
 	cmd => "loginctl enable-linger dmikalova",
 	shell => "/bin/bash",
 	creates => "/var/lib/systemd/linger/dmikalova",
+}
+
+# The autoinstall only builds @ and @swap, because those two have to exist
+# before the tree is snapshotted into place. The rest are ordinary subvolumes
+# and are cheapest to create while /home is still nearly empty.
+#
+# The split is what makes a snapper rollback of / safe: without @home, rolling
+# the root subvolume back takes the home directory with it.
+exec "btrfs-subvols-v1" {
+	cmd => deploy.readfile("/files/scripts/btrfs-subvols.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/btrfs-subvols-v1",
+
+	Depend => Pkg["rsync"],
+}
+
+file "/etc/systemd/system/home.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/home.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/home-dmikalova-.local-share-containers.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/home-dmikalova-.local-share-containers.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/srv-appdata.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/srv-appdata.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/srv-dumps.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/srv-dumps.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/srv-models.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/srv-models.mount"),
+	mode => "0644",
+}
+
+# Mount units rather than fstab entries: fstab is written by the installer with
+# install-time UUIDs, so mgmt owning it would fight a rebuild. /dev/mapper/den-root
+# is named by the autoinstall template, which is in this repo, so it is stable.
+exec "btrfs-mounts-v1" {
+	cmd => deploy.readfile("/files/scripts/btrfs-mounts.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/btrfs-mounts-v1",
+
+	Depend => Exec["btrfs-subvols-v1"],
 }
 
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits
