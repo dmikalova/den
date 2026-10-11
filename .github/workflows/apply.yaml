@@ -58,6 +58,21 @@ jobs:
             echo "${var}=${value}" >> "$GITHUB_ENV"
           done
 
+      # Temporary. The token exchange returns 403 and Tailscale exposes no API
+      # for trust credentials, so the claims are the only way to see which side
+      # disagrees. Prints the claims, never the token.
+      - name: show oidc claims
+        run: |
+          set -euo pipefail
+          tok=$(curl -fsSL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${TS_AUDIENCE}" | jq -r .value)
+          payload=$(printf '%s' "$tok" | cut -d. -f2)
+          pad=$(( (4 - ${#payload} % 4) % 4 ))
+          printf '%s%s' "$payload" "$(printf '=%.0s' $(seq 1 $pad))" \
+            | tr '_-' '/+' | base64 -d | jq '{sub, aud, iss}'
+          echo "tailscale expects audience: ${TS_AUDIENCE}"
+
       # Workload identity federation again, this time to Tailscale: the runner
       # proves who it is with its own OIDC token and no secret is stored.
       - name: join the tailnet
