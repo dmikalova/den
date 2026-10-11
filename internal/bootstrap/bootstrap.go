@@ -242,9 +242,14 @@ git -C "$dir" --no-pager log -1 --oneline
 // The entrypoint is metadata.yaml, not main.mcl: a naked mcl file cannot see
 // the files/ directory that deploy.readfile reads from. The ./ is required;
 // mgmt reads a bare name as raw code.
+//
+// Autoedges are skipped because the stage takes ~2 minutes on this config and
+// the converger calls that quiet time "converged", so mgmt exited before any
+// resource ran. Upstream disables it for the same reason (purpleidea/mgmt#840,
+// #739). Nothing here declares a Depend, so the implied edges are not missed.
 const runMgmt = `set -euo pipefail
 cd %s/mgmt
-mgmt run --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
+mgmt run --no-autoedges --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
 `
 
 // joinTailnet enrols den once, after the converge step that installs the
