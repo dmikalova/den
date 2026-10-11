@@ -9,6 +9,7 @@
 //	den bootstrap [flags]
 //	den apply [flags]
 //	den check [flags]
+//	den notify [flags] [message]
 //	den version
 //	den help
 package main
@@ -53,6 +54,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = applyHost(ctx, args[1:], stdout, stderr)
 	case args[0] == "check":
 		err = checkHost(ctx, args[1:], stdout, stderr)
+	case args[0] == "notify":
+		err = notifyHost(ctx, args[1:], stdout, stderr)
 	default:
 		err = fmt.Errorf("unknown command %q: %w", args[0], errUsage)
 	}
@@ -77,6 +80,7 @@ Usage:
   den bootstrap [flags]              patch a fresh install and install mgmt
   den apply [flags]                  converge den's root layer with mgmt
   den check [flags]                  run the smoke checks against a host
+  den notify [flags] [message]       report an event to Discord, from den
   den version
   den help
 

@@ -300,8 +300,14 @@ file "/etc/apt/apt.conf.d/20auto-upgrades" {
 #      cannot invalidate it and strand den at a passphrase prompt
 #   2. snapper is configured AND the /boot problem is solved: /boot is a
 #      separate partition, so rolling @ back to before a kernel update leaves
-#      a kernel in /boot whose modules are gone from /lib/modules
-#   3. a dead man notification exists to report the host did not come back
+#      a kernel in /boot whose modules are gone from /lib/modules.
+#      snapper is done. KernelCount below keeps the matching kernel in /boot,
+#      so a restored root still has an entry it can boot, but picking it is a
+#      human at the GRUB menu, not something that recovers on its own
+#   3. a dead man notification exists to report the host did not come back.
+#      Unit failures now alert through den-notify@.service, but that runs on
+#      den, so it cannot report den being absent. The external healthcheck is
+#      still missing, and it is the half that matters here
 file "/etc/apt/apt.conf.d/52den-unattended" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/apt/apt.conf.d/52den-unattended"),
@@ -340,4 +346,61 @@ exec "den-reconcile-units-v2" {
 	creates => "/var/lib/den/den-reconcile-units-v2",
 
 	Depend => File["/etc/systemd/system/den-reconcile.service"],
+}
+
+# The alerting path.
+#
+# Nothing on this host reports a failure to a human today: a unit can fail, the
+# timer can stop firing, and the first anyone knows is when a service is needed
+# and is not there. This is built before the services that will one day fail,
+# because retrofitting alerting means deciding per service whether it is worth
+# it, and the answer is always "later".
+#
+# den itself does the reporting, so the binary has to be on the host. Bump the
+# version here and in den-install.sh together.
+exec "den-binary-v1.6.0" {
+	cmd => deploy.readfile("/files/scripts/den-install.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/den-binary-v1.6.0",
+
+	Depend => File["/var/lib/den/"],
+}
+
+file "/etc/systemd/system/den-notify@.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-notify@.service"),
+	mode => "0644",
+
+	Depend => Exec["den-binary-v1.6.0"],
+}
+
+# No mode: see /var/lib/den/ above.
+file "/etc/systemd/system/service.d/" {
+	state => "exists",
+
+	Depend => File["/etc/systemd/system/den-notify@.service"],
+}
+
+# One file that gives every service on the host, present and future, an alert
+# on failure. The chain of edges above it is deliberate: mgmt runs with
+# --no-autoedges, and this drop-in takes effect at the next daemon-reload, so
+# a handler whose ExecStart is still missing would turn one failure into two.
+file "/etc/systemd/system/service.d/10-den-onfailure.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/service.d/10-den-onfailure.conf"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/service.d/"],
+}
+
+# The symlink to /dev/null masks the top level drop-in for the notifier itself.
+# Without it a failing notifier is a service failure, which schedules another
+# notifier. systemd detects most such loops, but the manual says to break the
+# chain explicitly and this is cheaper than finding out it did not.
+exec "den-notify-units-v1" {
+	cmd => "mkdir -p /etc/systemd/system/den-notify@.service.d && ln -sfn /dev/null /etc/systemd/system/den-notify@.service.d/10-den-onfailure.conf && systemctl daemon-reload && touch /var/lib/den/den-notify-units-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/den-notify-units-v1",
+
+	Depend => File["/etc/systemd/system/service.d/10-den-onfailure.conf"],
 }

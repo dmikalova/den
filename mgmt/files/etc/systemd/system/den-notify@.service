@@ -1,0 +1,17 @@
+[Unit]
+Description=Report %i failing to Discord
+
+# Deliberately no dependencies. This unit is the thing that reports a failure,
+# so anything it waits on is something that can stop a failure being reported.
+
+[Service]
+Type=oneshot
+
+# %i is the failed unit's name, supplied by OnFailure=den-notify@%N.service in
+# the top level service.d drop-in. den reads the journal for it and posts the
+# tail with the alert.
+ExecStart=/usr/local/bin/den notify --unit %i --level error
+
+# A failure here must stay quiet rather than cascade. The recursion guard is a
+# symlink to /dev/null over this unit's own copy of the drop-in, so a failing
+# notifier cannot trigger a notifier for the notifier.
