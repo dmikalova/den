@@ -28,9 +28,12 @@ pkg [
 }
 
 # Sentinels for the exec resources below, which change state that is not a file.
+#
+# No mode: mgmt 1.1.0 compares a directory's os.FileMode, which carries ModeDir,
+# against a bare octal, so the two never match and it chmods in a loop until the
+# converger gives up. Fixed upstream after 1.1.0. mkdir already gives 0755.
 file "/var/lib/den/" {
 	state => "exists",
-	mode => "0755",
 }
 
 # The install asks for kernel-crash-dumps to be off and does not get it, so
@@ -118,10 +121,15 @@ exec "enable-linger" {
 
 # Enrolment is den apply's last step, not this one: the key cannot live in a
 # public repo. This only installs the package.
+# Depend because this script runs apt and the pkg group runs PackageKit. Both
+# want the apt lock, PackageKit cannot wait for it, and with autoedges off
+# nothing else orders them.
 exec "tailscale-v1" {
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
+
+	Depend => Pkg["unattended-upgrades"],
 }
 
 # Drives idle down on their own; smartd is what notices one dying first.
@@ -183,7 +191,12 @@ file "/etc/systemd/system/den-reconcile.timer" {
 	mode => "0644",
 }
 
-svc "den-reconcile.timer" {
-	state => "running",
-	startup => "enabled",
+# Not a svc resource: mgmt appends .service to the name, so it looks for
+# den-reconcile.timer.service and fails. The wants symlink is the real state.
+exec "den-reconcile-timer-v1" {
+	cmd => "systemctl daemon-reload && systemctl enable --now den-reconcile.timer",
+	shell => "/bin/bash",
+	creates => "/etc/systemd/system/timers.target.wants/den-reconcile.timer",
+
+	Depend => File["/etc/systemd/system/den-reconcile.timer"],
 }
