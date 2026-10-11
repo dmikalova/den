@@ -16,6 +16,10 @@ inline body has to escape every dollar. That is not only tedious: the
 resolved it the result would have been a silently wrong policy. Real files also
 let shellcheck read the scripts.
 
+`files/` mirrors the destination path, so `files/etc/sudoers.d/den` lands at
+`/etc/sudoers.d/den`. The exception is `files/scripts/`, which holds `exec`
+bodies that are piped to bash and never written to disk.
+
 ## Why mgmt and not a dotfile manager
 
 About half of den's root layer is not files. Packages, service enablement,
