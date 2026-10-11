@@ -3,13 +3,20 @@ name: apply
 # Delivery is still a pull: this job only tells den to reconcile sooner than
 # its timer would. den is never exposed; the runner joins the tailnet for the
 # length of the job and the action's post step logs it out again.
-
+#
+# TODO: restore the push trigger once three things are true. Until then every
+# push to mgmt/** fails here, which trains us to ignore a red run.
+#   1. TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET exist as repo secrets
+#   2. den is on the tailnet, which needs the tailscale-v1 exec to have run
+#   3. /usr/local/bin/den-reconcile exists on den
+#
+# on:
+#   push:
+#     branches: [main]
+#     paths:
+#       - "mgmt/**"
+#       - ".github/workflows/apply.yaml"
 on:
-  push:
-    branches: [main]
-    paths:
-      - "mgmt/**"
-      - ".github/workflows/apply.yaml"
   workflow_dispatch:
 
 concurrency:
