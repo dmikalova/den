@@ -1,0 +1,163 @@
+# den's root layer.
+#
+# Only things that need root belong here. Everything den actually serves is a
+# rootless Podman quadlet living in the login user's home, started by that
+# user's own systemd. What root owns is the ground those quadlets stand on:
+# packages, mounts, lingering, and a few one shot enablements.
+#
+# mgmt converges this once and exits. See docs/bootstrap.md.
+
+import "os"
+
+# The whole host package set. If this list grows much past twenty, something
+# that should be a container has leaked into the host.
+pkg [
+	"btrfs-progs",
+	"mergerfs",
+	"ncurses-term",
+	"smartmontools",
+	"snapper",
+	"snapraid",
+	"systemd-zram-generator",
+	"ufw",
+	"unattended-upgrades",
+] {
+	state => "installed",
+	allowunsupported => os.is_family_debian() ?: true,
+}
+
+# Sentinels for the exec resources below, which change state that is not a file.
+file "/var/lib/den/" {
+	state => "exists",
+	mode => "0755",
+}
+
+# The install asks for kernel-crash-dumps to be off and does not get it, so
+# take the reservation back here. A crash dump is of no use on a host whose
+# recovery plan is to rebuild it from this file.
+pkg "kdump-tools" {
+	state => "uninstalled",
+}
+
+# Without this, the drives expose no hwmon and their temperature can only be
+# read by shelling out to smartctl.
+file "/etc/modules-load.d/drivetemp.conf" {
+	state => "exists",
+	content => "drivetemp\n",
+	mode => "0644",
+}
+
+# Compressed swap in RAM, on top of the disk swapfile the install lays down.
+# zram takes the higher priority, so cold anonymous pages are compressed into
+# RAM and the SSD is only reached once zram fills. The win is not capacity:
+# it is that the kernel can evict pages nothing will touch again and give the
+# memory to page cache.
+file "/etc/systemd/zram-generator.conf" {
+	state => "exists",
+	content => "[zram0]\nzram-size = ram / 4\ncompression-algorithm = zstd\n",
+	mode => "0644",
+}
+
+# Swapping to RAM is cheap enough that the kernel should do it readily. The
+# stock 60 is tuned for swap that costs a disk seek.
+file "/etc/sysctl.d/99-den-swap.conf" {
+	state => "exists",
+	content => "vm.swappiness = 100\n",
+	mode => "0644",
+}
+
+# GRUB's stock recordfail pause is 30 seconds, which a headless box spends
+# waiting for a keystroke nobody is there to press.
+#
+# Deliberately no ahci.mask_port_map. Cheap SATA cards sometimes advertise far
+# more ports than they wire up and the kernel wastes minutes probing phantom
+# ones, but the card fitted here reports its 8 real ports honestly, and a mask
+# would only discard working ports. It is also global: it hits the chipset's
+# own controller too. Measure before ever reintroducing it:
+#   journalctl -k | grep -E 'masking port_map|ports implemented'
+file "/etc/default/grub.d/99-den.cfg" {
+	state => "exists",
+	content => "GRUB_TIMEOUT=2\nGRUB_TIMEOUT_STYLE=menu\nGRUB_RECORDFAIL_TIMEOUT=2\n",
+	mode => "0644",
+}
+
+# grub.cfg is generated, so writing the drop-in is only half the job. The mtime
+# comparison reruns this whenever the drop-in is newer and never otherwise,
+# which also makes it safe if mgmt orders the file write after this exec.
+exec "update-grub" {
+	cmd => "update-grub",
+	shell => "/bin/bash",
+	ifcmd => "! test /boot/grub/grub.cfg -nt /etc/default/grub.d/99-den.cfg",
+	ifshell => "/bin/bash",
+}
+
+# en_DK is the ISO 8601 locale: 24 hour clock and YYYY-MM-DD dates. Only
+# LC_TIME takes it, so messages stay in English.
+exec "locales-v1" {
+	cmd => "locale-gen en_US.UTF-8 en_DK.UTF-8 && update-locale LC_TIME=en_DK.UTF-8 && touch /var/lib/den/locales-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/locales-v1",
+}
+
+# Without lingering, the login user's quadlets stop at logout and never come
+# back after a reboot. Nothing reports this; the services are simply absent.
+exec "enable-linger" {
+	cmd => "loginctl enable-linger dmikalova",
+	shell => "/bin/bash",
+	creates => "/var/lib/systemd/linger/dmikalova",
+}
+
+# Drives idle down on their own; smartd is what notices one dying first.
+svc "smartd" {
+	state => "running",
+	startup => "enabled",
+}
+
+# Default deny inbound. The LAN rule is not optional: den is reached over the
+# LAN during bootstrap, before it is on the tailnet, and losing it means a trip
+# to the physical console. Bump the sentinel version to reapply.
+exec "ufw-policy-v1" {
+	cmd => "ufw --force reset && ufw default deny incoming && ufw default allow outgoing && ufw allow in on tailscale0 && ufw allow from 192.168.0.0/24 to any port 22 proto tcp && ufw allow from 192.168.0.0/24 to any port 5353 proto udp && ufw --force enable && touch /var/lib/den/ufw-policy-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/ufw-policy-v1",
+}
+
+# Security updates only, and never an unattended reboot: a reboot that the TPM
+# fails to unlock strands the host at a passphrase prompt nobody is watching.
+file "/etc/apt/apt.conf.d/20auto-upgrades" {
+	state => "exists",
+	content => "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n",
+	mode => "0644",
+}
+
+file "/etc/apt/apt.conf.d/52den-unattended" {
+	state => "exists",
+	content => "Unattended-Upgrade::Automatic-Reboot \"false\";\n",
+	mode => "0644",
+}
+
+# The drift catcher. den pulls its own config; nothing outside pushes to it.
+# The pull drops to the owning user so git does not refuse the checkout as
+# dubiously owned, then mgmt converges as root.
+file "/usr/local/bin/den-reconcile" {
+	state => "exists",
+	content => "#!/bin/bash\nset -euo pipefail\nrunuser -u dmikalova -- git -C /srv/den-config pull --ff-only\ncd /srv/den-config/mgmt\nexec mgmt run --converger-timeout 5 --converged-exit lang main.mcl\n",
+	mode => "0755",
+}
+
+file "/etc/systemd/system/den-reconcile.service" {
+	state => "exists",
+	content => "[Unit]\nDescription=Pull den's config and converge it\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/den-reconcile\n",
+	mode => "0644",
+}
+
+file "/etc/systemd/system/den-reconcile.timer" {
+	state => "exists",
+	content => "[Unit]\nDescription=Reconcile den daily\n\n[Timer]\nOnCalendar=daily\nRandomizedDelaySec=30m\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n",
+	mode => "0644",
+}
+
+svc "den-reconcile.timer" {
+	state => "running",
+	startup => "enabled",
+}

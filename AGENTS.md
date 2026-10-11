@@ -41,3 +41,17 @@ flag that removes that check.
 `internal/remote` shells out to the `ssh` binary so the operator's ssh config,
 agent and known_hosts apply. Do not replace it with an ssh library: that moves
 host key verification into den, and the usual next step is disabling it.
+
+## Configuring den
+
+`mgmt/main.mcl` is the whole root layer. `den apply` converges it once and
+exits; mgmt is not run as a daemon, because the root layer only changes when
+someone edits the file.
+
+- Root only. Anything the login user can own belongs in their home, under
+  their own systemd. den's services are rootless Podman quadlets.
+- Every `exec` resource needs a `creates` or equivalent guard, or the run
+  stops being idempotent.
+- `den apply --dry-run` prints the shell and contacts nothing.
+  `den apply --noop` runs mgmt and reports what it would change. They are not
+  the same check.

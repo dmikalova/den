@@ -9,7 +9,7 @@ comments and commit messages.
 `den` in every config file.
 _Avoid:_ the NAS, the server, the box.
 
-**host layer** — what runs directly on den: chezmoi, Tailscale, Podman,
+**host layer** — what runs directly on den: mgmt, Tailscale, Podman,
 mergerfs, SnapRAID, snapper, smartd, Kopia, Netdata, Samba, Caddy, the NVIDIA
 driver, and the `den` binary. Everything else is a quadlet.
 
@@ -59,13 +59,17 @@ healthcheck. Every scheduled job ends in a notify.
 success. Silence raises the alarm.
 _Avoid:_ heartbeat, ping, monitor.
 
-**reconcile** — the daily `chezmoi update` timer that catches drift. Its job
+**reconcile** — the daily timer that re-runs `apply` to catch drift. Its job
 is detection, not speed.
 _Avoid:_ sync, when reconcile is meant. **sync** is SnapRAID's parity update.
 
 **bootstrap** — the one-time pass that takes a finished install to a host
-chezmoi can configure: patches, chezmoi itself, Tailscale, one reboot.
+mgmt can configure: patches, mgmt itself, Tailscale, one reboot.
 _Avoid:_ provision, setup.
 
-**apply** — running chezmoi over both source trees. Repeatable by hand, and
-what reconcile runs on a timer.
+**apply** — one mgmt run over `mgmt/main.mcl`. It converges and exits.
+Repeatable by hand, and what reconcile runs on a timer.
+
+**converge** — what a single mgmt run does: bring the host to the state the
+mcl describes, then stop. den does not run mgmt as a daemon.
+_Avoid:_ provision, when converge is meant.

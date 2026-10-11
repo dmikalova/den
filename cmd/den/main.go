@@ -71,8 +71,8 @@ Usage:
   den usb build [flags]              build an unattended install image
   den usb memtest [flags]            fetch the memtest86+ image
   den usb write --device <node>      write an image to a removable disk
-  den bootstrap [flags]              patch a fresh install and install chezmoi
-  den apply [flags]                  run chezmoi over den's host layer
+  den bootstrap [flags]              patch a fresh install and install mgmt
+  den apply [flags]                  converge den's root layer with mgmt
   den version
   den help
 

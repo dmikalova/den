@@ -1,0 +1,43 @@
+name: apply
+
+# Delivery is still a pull: this job only tells den to reconcile sooner than
+# its timer would. den is never exposed; the runner joins the tailnet for the
+# length of the job and the action's post step logs it out again.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mgmt/**"
+      - ".github/workflows/apply.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: converge den
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: join the tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: den-apply
+          ping: den
+
+      # Tailscale SSH authenticates by tailnet identity, so no key is deployed
+      # and no secret is involved. The ACL decides that tag:ci may be root.
+      - name: converge
+        run: |
+          ssh -o BatchMode=yes \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=15 \
+              root@den den-reconcile

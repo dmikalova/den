@@ -181,26 +181,10 @@ autoinstall:
       WantedBy=multi-user.target
       UNIT
     - curtin in-target --target=/target -- systemctl enable den-tpm-enroll.service
-    - install -d -m 0755 /target/etc/default/grub.d
-    - |
-      cat > /target/etc/default/grub.d/99-den.cfg <<'CFG'
-      # The 30 second wait is GRUB_RECORDFAIL_TIMEOUT, which applies whenever
-      # the previous boot did not clear the recordfail flag.
-      GRUB_TIMEOUT=2
-      GRUB_TIMEOUT_STYLE=menu
-      GRUB_RECORDFAIL_TIMEOUT=2
-
-      # The ASM1166 reports 32 ports but has 6. Without the mask the kernel
-      # probes all 32 and boot takes minutes. Masking only hides ports behind
-      # a SATA port multiplier, which this build deliberately has none of.
-      # Appended, so Ubuntu's own default flags survive.
-      GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT ahci.mask_port_map=0x3f"
-      CFG
-    - curtin in-target --target=/target -- update-grub
-    # en_DK is the ISO 8601 locale: 24 hour clock and YYYY-MM-DD dates. Only
-    # LC_TIME is taken from it, so messages stay in English.
-    - curtin in-target --target=/target -- locale-gen en_US.UTF-8 en_DK.UTF-8
-    - curtin in-target --target=/target -- update-locale LC_TIME=en_DK.UTF-8
+    # GRUB defaults and locales used to be written here. They are ordinary
+    # config, not disk shape, so mgmt owns them now: see mgmt/main.mcl. A fresh
+    # install boots with a 30 second recordfail pause and the wrong LC_TIME
+    # until the first `den apply`, which is a cosmetic gap and a deliberate one.
     # curtin has no subvolume action, so the layout is rebuilt here. This must
     # stay the last late-command: it reads the finished tree out of /target.
     - |

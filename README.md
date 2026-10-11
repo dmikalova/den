@@ -45,8 +45,7 @@ ssh den sudo tailscale up --ssh
 den apply
 ```
 
-`bootstrap` patches the fresh install and puts chezmoi and Tailscale on it.
-`apply` runs chezmoi over the two source trees in `chezmoi/`, and is safe to
-repeat.
+`bootstrap` patches the fresh install and puts mgmt and Tailscale on it.
+`apply` converges the root layer described in `mgmt/`, and is safe to repeat.
 
 See [docs/bootstrap.md](docs/bootstrap.md) for the full procedure.

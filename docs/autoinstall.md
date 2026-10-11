@@ -89,7 +89,7 @@ The seed:
 - Installs `curl`, `git` and `gnupg`, then reboots.
 
 Nothing else is installed at this stage. Everything above the host layer
-comes from chezmoi on first boot.
+comes from mgmt on first boot.
 
 **The LUKS passphrase is in clear on the install media.** curtin accepts it no
 other way, and it copies the seed to `/var/log/installer` on the installed
@@ -126,7 +126,7 @@ Autoinstall has one `locale` key and no key for the time format, so the 24
 hour clock and ISO 8601 dates come from `LC_TIME=en_DK.UTF-8`, written by a
 late-command. Only `LC_TIME` is taken from `en_DK`, so messages stay in
 English. The setting lands in `/etc/default/locale`, which PAM reads for every
-login shell including root. This is machine state, not user state, so chezmoi
+login shell including root. This is machine state, not user state, so mgmt
 does not own it.
 
 Journal timestamps are not affected either way. `journalctl` prints its own
@@ -136,7 +136,7 @@ format, which ignores the locale.
 
 `updates: security` is the Subiquity default and the smallest setting it
 offers; there is no way to install zero updates. Everything beyond that is
-deferred to chezmoi on first boot.
+deferred to mgmt on first boot.
 
 Three keys cut install-time work:
 
@@ -171,6 +171,30 @@ extent with `@`, so it costs almost nothing at first, and it is a working
 fallback if the new layout does not boot. Delete it by hand once the host
 comes up (see First boot), because it does start to cost real space as `@`
 diverges from it.
+
+### Swap
+
+den runs both zram and a disk swapfile, and they are configured in different
+places on purpose.
+
+| Layer     | Where               | Why there                             |
+| --------- | ------------------- | ------------------------------------- |
+| swapfile  | this autoinstall    | it needs its own subvolume            |
+| zram      | `mgmt/main.mcl`     | it is a package and a config file     |
+
+The split follows one rule: **anything that shapes the disk belongs to the
+install, anything reconcilable belongs to mgmt.** `@swap` has to exist before
+the tree moves into `@`, because btrfs refuses to snapshot a subvolume that
+holds a swapfile. There is no way to add it later without unwinding the
+layout. zram has no such constraint, so putting it in the image would only
+make it harder to change.
+
+They cooperate rather than compete. zram takes the higher priority, so the
+kernel compresses cold anonymous pages into RAM first and only reaches the
+SSD when zram is full. The point of either is less about running out of
+memory, which 64 GB makes unlikely, than about letting the kernel evict pages
+some daemon allocated at startup and will never touch again, and hand that
+memory to page cache. On a file server, page cache is what makes it fast.
 
 ## First boot
 
@@ -281,7 +305,8 @@ Enter it once. The TPM takes over from the second boot.
 5. Apply the host config:
 
    ```sh
-   sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply dmikalova/den
+   den bootstrap
+   den apply
    ```
 
 6. Confirm the host can reach you:

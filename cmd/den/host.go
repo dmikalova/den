@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 
 	"github.com/dmikalova/den/internal/bootstrap"
 	"github.com/dmikalova/den/internal/remote"
@@ -16,12 +18,13 @@ const defaultHost = "den"
 
 // hostFlags are the flags den bootstrap and den apply share.
 type hostFlags struct {
-	host    *string
-	user    *string
-	repo    *string
-	dir     *string
-	chezmoi *string
-	dryRun  *bool
+	host   *string
+	user   *string
+	repo   *string
+	dir    *string
+	mgmt   *string
+	dryRun *bool
+	noop   *bool
 }
 
 func addHostFlags(fs *flag.FlagSet) hostFlags {
@@ -31,15 +34,16 @@ func addHostFlags(fs *flag.FlagSet) hostFlags {
 		repo: fs.String(
 			"repo",
 			bootstrap.DefaultConfigRepo,
-			"git remote holding the chezmoi trees",
+			"git remote holding the mcl source",
 		),
 		dir: fs.String("config-dir", bootstrap.DefaultConfigDir, "where that remote is cloned"),
-		chezmoi: fs.String(
-			"chezmoi-version",
-			bootstrap.DefaultChezmoiVersion,
-			"chezmoi release to install",
+		mgmt: fs.String(
+			"mgmt-version",
+			bootstrap.DefaultMgmtVersion,
+			"mgmt release to install",
 		),
 		dryRun: fs.Bool("dry-run", false, "print every script instead of running it"),
+		noop:   fs.Bool("noop", false, "run mgmt but report changes instead of making them"),
 	}
 }
 
@@ -50,11 +54,28 @@ func (f hostFlags) split(stdout, stderr io.Writer) (remote.Host, bootstrap.Optio
 		Stderr: stderr,
 		DryRun: *f.dryRun,
 	}, bootstrap.Options{
-		User:           *f.user,
-		ChezmoiVersion: *f.chezmoi,
-		ConfigRepo:     *f.repo,
-		ConfigDir:      *f.dir,
+		User:        *f.user,
+		MgmtVersion: *f.mgmt,
+		ConfigRepo:  *f.repo,
+		ConfigDir:   *f.dir,
+		Terminfo:    localTerminfo(),
+		Noop:        *f.noop,
 	}
+}
+
+// localTerminfo describes the terminal den is being driven from, so the server
+// can be taught about it. A terminal the local system cannot describe is not an
+// error: the step is simply skipped.
+func localTerminfo() string {
+	term := os.Getenv("TERM")
+	if term == "" {
+		return ""
+	}
+	out, err := exec.Command("infocmp", "-x", term).Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 func bootstrapHost(ctx context.Context, args []string, stdout, stderr io.Writer) error {
