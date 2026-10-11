@@ -201,6 +201,26 @@ exec "btrfs-mounts-v1" {
 	Depend => Exec["btrfs-subvols-v1"],
 }
 
+# Snapshots of /, /home and /srv/appdata. Must run after the mounts: each config
+# is created against a subvolume, and an unmounted /srv/appdata is just a
+# directory on @.
+#
+# No grub-btrfs. It is not packaged for this release, so it would mean building
+# a bootloader generator from source, and /boot is a separate ext4 partition
+# here, so a snapshot entry would pair an old root with the current kernel
+# anyway. Rollback is a rescue-USB job: mount subvolid=5 and promote a snapshot.
+#
+# Nothing enables the snapper timers, because the package already does, and
+# create-config appends to SNAPPER_CONFIGS itself. Bump the sentinel to reapply
+# the tuning after editing the script.
+exec "snapper-configs-v1" {
+	cmd => deploy.readfile("/files/scripts/snapper-configs.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/snapper-configs-v1",
+
+	Depend => Exec["btrfs-mounts-v1"],
+}
+
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits
 # on. .hushlogin silences the whole thing, including the last login line,
 # without deleting package files that an upgrade would put back.
