@@ -150,6 +150,9 @@ apt-get install -y --no-install-recommends libaugeas0 libvirt0
 // provides a compat package for. .github/workflows/mgmt.yaml rebuilds the same
 // tag against 26.04. Recheck upstream on every bump and go back to theirs when
 // it runs here.
+//
+// The asset hangs off den's newest release, so cutting a den release without
+// rerunning mgmt.yaml leaves this 404ing.
 const installMgmt = `set -euo pipefail
 want=%s
 if [ "$(mgmt --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)" = "$want" ]; then
@@ -159,9 +162,9 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bin=mgmt-linux-amd64-${want}
-base=https://github.com/dmikalova/den/releases/download/mgmt-${want}
+base=https://github.com/dmikalova/den/releases/latest/download
 curl -fsSL -o "$tmp/$bin" "$base/$bin"
-curl -fsSL -o "$tmp/sums" "$base/SHA256SUMS"
+curl -fsSL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"
 ( cd "$tmp" && grep "  $bin\$" sums | sha256sum -c - )
 install -m 0755 "$tmp/$bin" /usr/local/bin/mgmt
 mgmt --version

@@ -23,16 +23,23 @@ on:
   push:
     paths:
       - ".github/workflows/mgmt.yaml"
+  # The binary hangs off den's newest release, so a release without this job
+  # leaves bootstrap downloading a 404. Rebuilding is the cost of that choice.
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 env:
   MGMT_VERSION: ${{ inputs.version || '1.1.0' }}
-  # Match mgmt's go.mod exactly. Newer is not safer here: funcgen runs
-  # x/tools v0.41.0, which cannot read export data from a later toolchain and
-  # fails with "package sync without types" into a /dev/null'd stdout.
-  GO_VERSION: "1.25.7"
+  # mgmt's go.mod asks for 1.25.7 and pins x/tools v0.41.0. That combination is
+  # held together by funcgen, which runs x/tools and cannot read export data
+  # from a newer toolchain. Bumping both together works and is worth it: this
+  # binary runs as root on den, and an older toolchain means shipping known
+  # stdlib CVEs. Bump the two as a pair or not at all.
+  GO_VERSION: "1.27.2"
+  X_TOOLS_VERSION: "v0.52.0"
   GOTOOLCHAIN: local
 
 jobs:
@@ -62,15 +69,14 @@ jobs:
 
       # mgmt generates its lexer and parser at build time rather than vendoring
       # the output, so these are build inputs, not dev conveniences. The x/tools
-      # binaries track the version mgmt pins, since @latest would demand a
-      # toolchain newer than funcgen tolerates.
+      # binaries must match the version the build itself resolves.
       - name: install go build tools
         run: |
           set -euo pipefail
           go install github.com/blynn/nex@latest
-          go install golang.org/x/tools/cmd/goyacc@v0.41.0
-          go install golang.org/x/tools/cmd/stringer@v0.41.0
-          go install golang.org/x/tools/cmd/goimports@v0.41.0
+          go install "golang.org/x/tools/cmd/goyacc@${X_TOOLS_VERSION}"
+          go install "golang.org/x/tools/cmd/stringer@${X_TOOLS_VERSION}"
+          go install "golang.org/x/tools/cmd/goimports@${X_TOOLS_VERSION}"
 
       - name: fetch mgmt source
         run: |
@@ -81,7 +87,10 @@ jobs:
 
       - name: build
         working-directory: /tmp/mgmt
-        run: make build
+        run: |
+          set -euo pipefail
+          go get "golang.org/x/tools@${X_TOOLS_VERSION}"
+          make build
 
       - name: package
         run: |
@@ -90,14 +99,14 @@ jobs:
           install -m 0755 /tmp/mgmt/mgmt "$bin"
           ./"$bin" --version
           ldd ./"$bin"
-          sha256sum "$bin" > SHA256SUMS
+          sha256sum "$bin" > mgmt-SHA256SUMS
 
       - uses: actions/upload-artifact@v4
         with:
           name: mgmt
           path: |
             mgmt-linux-amd64-*
-            SHA256SUMS
+            mgmt-SHA256SUMS
 
   release:
     name: publish
@@ -110,17 +119,18 @@ jobs:
         with:
           name: mgmt
 
-      # The tag is prefixed so that these never collide with den's own tags.
-      - name: publish release
+      # The asset rides den's own release rather than a mgmt-prefixed tag of
+      # its own. den's release tooling reads the newest tag in the repo and
+      # parses it as semver, so any extra tag series breaks versioning.
+      # Assets are named so they cannot collide with den's own.
+      - name: attach to latest den release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="mgmt-${MGMT_VERSION}"
-          gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            && gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
-          gh release create "$tag" \
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          echo "attaching mgmt $MGMT_VERSION to den $tag"
+          gh release upload "$tag" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "mgmt $MGMT_VERSION for ubuntu 26.04" \
-            --notes "Unmodified upstream mgmt $MGMT_VERSION, rebuilt against Ubuntu 26.04 libraries. Upstream's own binary needs libxml2.so.2, which 26.04 does not ship." \
-            mgmt-linux-amd64-* SHA256SUMS
+            --clobber \
+            mgmt-linux-amd64-* mgmt-SHA256SUMS
