@@ -99,12 +99,30 @@ exec "locales-v1" {
 	creates => "/var/lib/den/locales-v1",
 }
 
+# The install writes this too, because den cannot reach mgmt without it. mgmt
+# keeps it from drifting. The content must match the installer's exactly.
+file "/etc/sudoers.d/den" {
+	state => "exists",
+	content => "dmikalova ALL=(ALL) NOPASSWD: ALL\n",
+	mode => "0440",
+}
+
 # Without lingering, the login user's quadlets stop at logout and never come
 # back after a reboot. Nothing reports this; the services are simply absent.
 exec "enable-linger" {
 	cmd => "loginctl enable-linger dmikalova",
 	shell => "/bin/bash",
 	creates => "/var/lib/systemd/linger/dmikalova",
+}
+
+# Tailscale is one exec rather than a pkg resource because its apt repo has to
+# exist before the package is visible, and den is reached over the LAN until
+# this runs. Enrol it afterwards, once, by hand:
+#   sudo tailscale up --ssh --advertise-tags=tag:server
+exec "tailscale-v1" {
+	cmd => "set -euo pipefail; . /etc/os-release; base=https://pkgs.tailscale.com/stable/ubuntu; curl -fsSL \"$base/${VERSION_CODENAME}.noarmor.gpg\" -o /usr/share/keyrings/tailscale-archive-keyring.gpg; curl -fsSL \"$base/${VERSION_CODENAME}.tailscale-keyring.list\" -o /etc/apt/sources.list.d/tailscale.list; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale; touch /var/lib/den/tailscale-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/tailscale-v1",
 }
 
 # Drives idle down on their own; smartd is what notices one dying first.
@@ -122,17 +140,30 @@ exec "ufw-policy-v1" {
 	creates => "/var/lib/den/ufw-policy-v1",
 }
 
-# Security updates only, and never an unattended reboot: a reboot that the TPM
-# fails to unlock strands the host at a passphrase prompt nobody is watching.
+# systemd already runs the upgrades, on apt-daily.timer and
+# apt-daily-upgrade.timer. All that is missing is policy, and policy is a
+# config file, so mgmt owns it and runs nothing itself.
 file "/etc/apt/apt.conf.d/20auto-upgrades" {
 	state => "exists",
 	content => "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n",
 	mode => "0644",
 }
 
+# Stock Allowed-Origins is security only, which leaves ordinary bug fixes in
+# -updates to rot. Apt appends to list options, so this widens 50unattended
+# rather than replacing it. Remove-Unused does the job autoremove --purge used
+# to do in bootstrap, including old kernels.
+#
+# Automatic-Reboot stays false until three things are true, in order:
+#   1. the LUKS TPM token is confirmed bound to PCR 7 only, so a kernel update
+#      cannot invalidate it and strand den at a passphrase prompt
+#   2. snapper is configured AND the /boot problem is solved: /boot is a
+#      separate partition, so rolling @ back to before a kernel update leaves
+#      a kernel in /boot whose modules are gone from /lib/modules
+#   3. a dead man notification exists to report the host did not come back
 file "/etc/apt/apt.conf.d/52den-unattended" {
 	state => "exists",
-	content => "Unattended-Upgrade::Automatic-Reboot \"false\";\n",
+	content => "Unattended-Upgrade::Allowed-Origins { \"${distro_id}:${distro_codename}-updates\"; };\nUnattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";\nUnattended-Upgrade::Remove-Unused-Dependencies \"true\";\nUnattended-Upgrade::Automatic-Reboot \"false\";\n",
 	mode => "0644",
 }
 

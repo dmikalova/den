@@ -48,12 +48,14 @@ type Step struct {
 	Wait bool
 }
 
-// Bootstrap is the first pass: identify the host, patch it, install mgmt and
-// tailscale, reboot if the kernel moved.
+// Bootstrap is the first pass. It holds only what mgmt cannot do: assert the
+// host is what den expects, install the handful of packages needed to reach a
+// git remote, and put the mgmt binary on disk. Everything reconcilable belongs
+// in mgmt/main.mcl and lands on the first Apply.
 func Bootstrap(o Options) []Step {
 	steps := []Step{
 		{Name: "identify the host", Script: identify},
-		{Name: "patch and install base packages", Root: true, Script: patch},
+		{Name: "install base packages", Root: true, Script: patch},
 		{
 			Name:   "install mgmt " + o.MgmtVersion,
 			Root:   true,
@@ -67,10 +69,7 @@ func Bootstrap(o Options) []Step {
 			Script: fmt.Sprintf(installTerminfo, o.Terminfo),
 		})
 	}
-	return append(steps,
-		Step{Name: "install tailscale", Root: true, Script: installTailscale},
-		Step{Name: "reboot if required", Root: true, Script: rebootIfNeeded, Wait: true},
-	)
+	return steps
 }
 
 // Apply is the second pass: fetch the config repo and converge the host layer.
@@ -130,17 +129,24 @@ printf 'arch    %s\n' "$arch"
 test "$arch" = amd64
 `
 
+// patch installs only what the rest of bootstrap needs: curl fetches the mgmt
+// binary, git clones the config repo, ca-certificates makes both verify. The
+// full-upgrade that used to live here is deliberately absent. It is slow, it
+// can pull a kernel, and nothing downstream depends on it.
 const patch = `set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get -y full-upgrade
-apt-get -y autoremove --purge
 apt-get install -y ca-certificates curl git
 `
 
 // installMgmt checks the binary against the sums file published with the
-// release. den does not pipe an install script into a shell. The sums file is
-// PGP clearsigned and the signature is not yet checked, only the digest.
+// release. den does not pipe an install script into a shell.
+//
+// The release is den's own, not upstream's: upstream builds one binary on
+// Fedora and it needs libxml2.so.2, which Ubuntu 26.04 neither ships nor
+// provides a compat package for. .github/workflows/mgmt.yaml rebuilds the same
+// tag against 26.04. Recheck upstream on every bump and go back to theirs when
+// it runs here.
 const installMgmt = `set -euo pipefail
 want=%s
 if [ "$(mgmt --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)" = "$want" ]; then
@@ -150,9 +156,9 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bin=mgmt-linux-amd64-${want}
-base=https://github.com/purpleidea/mgmt/releases/download/${want}
+base=https://github.com/dmikalova/den/releases/download/mgmt-${want}
 curl -fsSL -o "$tmp/$bin" "$base/$bin"
-curl -fsSL -o "$tmp/sums" "$base/SHA256SUMS.asc"
+curl -fsSL -o "$tmp/sums" "$base/SHA256SUMS"
 ( cd "$tmp" && grep "  $bin\$" sums | sha256sum -c - )
 install -m 0755 "$tmp/$bin" /usr/local/bin/mgmt
 mgmt --version
@@ -160,7 +166,15 @@ mgmt --version
 
 // installTerminfo compiles the operator's terminal description system wide, so
 // that a sudo session gets it too. Without this, anything that pages output
-// warns that the terminal is not fully functional.
+// warns that the terminal is not fully functional. ncurses-term 6.6 ships a
+// ghostty entry but no xterm-ghostty alias, which is the TERM Ghostty sends,
+// so this is still load bearing.
+//
+// TODO: this is config and belongs in mgmt, which would also stop den's own
+// terminal leaking into the host's state. Two things block it: mgmt's exec cwd
+// is unverified, so a committed terminfo file cannot be referenced relatively,
+// and hardcoding /srv/den-config would defeat --config-dir. Settle it after the
+// first apply shows how exec actually behaves.
 const installTerminfo = `set -euo pipefail
 if ! command -v tic >/dev/null; then
   export DEBIAN_FRONTEND=noninteractive
@@ -170,39 +184,6 @@ tic -x -o /usr/share/terminfo - <<'TERMINFO'
 %s
 TERMINFO
 echo "terminfo compiled into /usr/share/terminfo"
-`
-
-// installTailscale adds the upstream repo rather than curl-pipe-sh, and
-// stops if tailscale has not published packages for this release yet.
-const installTailscale = `set -euo pipefail
-if command -v tailscale >/dev/null; then
-  tailscale version
-  exit 0
-fi
-. /etc/os-release
-base=https://pkgs.tailscale.com/stable/ubuntu
-if ! curl -fsI "$base/${VERSION_CODENAME}.noarmor.gpg" >/dev/null; then
-  echo "tailscale publishes no packages for ubuntu ${VERSION_CODENAME} yet" >&2
-  exit 1
-fi
-curl -fsSL "$base/${VERSION_CODENAME}.noarmor.gpg" \
-  -o /usr/share/keyrings/tailscale-archive-keyring.gpg
-curl -fsSL "$base/${VERSION_CODENAME}.tailscale-keyring.list" \
-  -o /etc/apt/sources.list.d/tailscale.list
-apt-get update
-apt-get install -y tailscale
-echo "enrol it with: sudo tailscale up --ssh"
-`
-
-// rebootIfNeeded detaches the reboot so ssh closes cleanly instead of the
-// connection dying mid-command and looking like a failure.
-const rebootIfNeeded = `set -euo pipefail
-if [ -f /var/run/reboot-required ]; then
-  echo "rebooting"
-  systemd-run --on-active=2 systemctl reboot >/dev/null
-else
-  echo "no reboot required"
-fi
 `
 
 const makeConfigDir = `set -euo pipefail

@@ -177,10 +177,10 @@ diverges from it.
 den runs both zram and a disk swapfile, and they are configured in different
 places on purpose.
 
-| Layer     | Where               | Why there                             |
-| --------- | ------------------- | ------------------------------------- |
-| swapfile  | this autoinstall    | it needs its own subvolume            |
-| zram      | `mgmt/main.mcl`     | it is a package and a config file     |
+| Layer    | Where            | Why there                         |
+| -------- | ---------------- | --------------------------------- |
+| swapfile | this autoinstall | it needs its own subvolume        |
+| zram     | `mgmt/main.mcl`  | it is a package and a config file |
 
 The split follows one rule: **anything that shapes the disk belongs to the
 install, anything reconcilable belongs to mgmt.** `@swap` has to exist before

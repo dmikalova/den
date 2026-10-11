@@ -181,6 +181,18 @@ autoinstall:
       WantedBy=multi-user.target
       UNIT
     - curtin in-target --target=/target -- systemctl enable den-tpm-enroll.service
+    # Passwordless sudo is a bootstrap dependency of the automation, not
+    # ordinary config: without it the first `den apply` cannot install the file
+    # that removes the password prompt. mgmt owns the same path afterwards, so
+    # keep the two byte for byte identical or every run will rewrite it.
+    #
+    # A malformed file in sudoers.d breaks sudo for everyone, so it is checked
+    # before it is installed, and never written in place.
+    - |
+      set -euo pipefail
+      printf '%s ALL=(ALL) NOPASSWD: ALL\n' '{{ .Username }}' > /tmp/den-sudoers
+      visudo -cf /tmp/den-sudoers
+      install -m 0440 -o root -g root /tmp/den-sudoers /target/etc/sudoers.d/den
     # GRUB defaults and locales used to be written here. They are ordinary
     # config, not disk shape, so mgmt owns them now: see mgmt/main.mcl. A fresh
     # install boots with a 30 second recordfail pause and the wrong LC_TIME
