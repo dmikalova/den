@@ -29,7 +29,11 @@ permissions:
 
 env:
   MGMT_VERSION: ${{ inputs.version || '1.1.0' }}
-  GO_VERSION: "1.27.1"
+  # Match mgmt's go.mod exactly. Newer is not safer here: funcgen runs
+  # x/tools v0.41.0, which cannot read export data from a later toolchain and
+  # fails with "package sync without types" into a /dev/null'd stdout.
+  GO_VERSION: "1.25.7"
+  GOTOOLCHAIN: local
 
 jobs:
   build:
@@ -57,15 +61,16 @@ jobs:
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
 
       # mgmt generates its lexer and parser at build time rather than vendoring
-      # the output, so these are build inputs, not dev conveniences. goimports
-      # included: the parser generator pipes its output through it.
+      # the output, so these are build inputs, not dev conveniences. The x/tools
+      # binaries track the version mgmt pins, since @latest would demand a
+      # toolchain newer than funcgen tolerates.
       - name: install go build tools
         run: |
           set -euo pipefail
           go install github.com/blynn/nex@latest
-          go install golang.org/x/tools/cmd/goyacc@latest
-          go install golang.org/x/tools/cmd/stringer@latest
-          go install golang.org/x/tools/cmd/goimports@latest
+          go install golang.org/x/tools/cmd/goyacc@v0.41.0
+          go install golang.org/x/tools/cmd/stringer@v0.41.0
+          go install golang.org/x/tools/cmd/goimports@v0.41.0
 
       - name: fetch mgmt source
         run: |
