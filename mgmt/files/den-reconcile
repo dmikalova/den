@@ -1,0 +1,8 @@
+#!/bin/bash
+# den pulls its own config; nothing outside pushes to it. The pull drops to the
+# owning user so git does not refuse the checkout as dubiously owned, then mgmt
+# converges as root.
+set -euo pipefail
+runuser -u dmikalova -- git -C /srv/den-config pull --ff-only
+cd /srv/den-config/mgmt
+exec mgmt run --converger-timeout 5 --converged-exit lang metadata.yaml

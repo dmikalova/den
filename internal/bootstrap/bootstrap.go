@@ -206,7 +206,10 @@ git -C "$dir" --no-pager log -1 --oneline
 // runMgmt converges once and exits rather than staying up as a daemon. den's
 // root layer does not drift on its own, so continuous watching buys nothing
 // and a long lived agent is one more thing to reason about.
+//
+// The entrypoint is metadata.yaml, not main.mcl: a naked mcl file cannot see
+// the files/ directory that deploy.readfile reads from.
 const runMgmt = `set -euo pipefail
 cd %s/mgmt
-mgmt run --converger-timeout 5 --converged-exit%s lang main.mcl
+mgmt run --converger-timeout 5 --converged-exit%s lang metadata.yaml
 `

@@ -7,6 +7,7 @@
 #
 # mgmt converges this once and exits. See docs/bootstrap.md.
 
+import "deploy"
 import "os"
 
 # The whole host package set. If this list grows much past twenty, something
@@ -43,7 +44,7 @@ pkg "kdump-tools" {
 # read by shelling out to smartctl.
 file "/etc/modules-load.d/drivetemp.conf" {
 	state => "exists",
-	content => "drivetemp\n",
+	content => deploy.readfile("/files/drivetemp.conf"),
 	mode => "0644",
 }
 
@@ -54,7 +55,7 @@ file "/etc/modules-load.d/drivetemp.conf" {
 # memory to page cache.
 file "/etc/systemd/zram-generator.conf" {
 	state => "exists",
-	content => "[zram0]\nzram-size = ram / 4\ncompression-algorithm = zstd\n",
+	content => deploy.readfile("/files/zram-generator.conf"),
 	mode => "0644",
 }
 
@@ -62,7 +63,7 @@ file "/etc/systemd/zram-generator.conf" {
 # stock 60 is tuned for swap that costs a disk seek.
 file "/etc/sysctl.d/99-den-swap.conf" {
 	state => "exists",
-	content => "vm.swappiness = 100\n",
+	content => deploy.readfile("/files/99-den-swap.conf"),
 	mode => "0644",
 }
 
@@ -77,7 +78,7 @@ file "/etc/sysctl.d/99-den-swap.conf" {
 #   journalctl -k | grep -E 'masking port_map|ports implemented'
 file "/etc/default/grub.d/99-den.cfg" {
 	state => "exists",
-	content => "GRUB_TIMEOUT=2\nGRUB_TIMEOUT_STYLE=menu\nGRUB_RECORDFAIL_TIMEOUT=2\n",
+	content => deploy.readfile("/files/grub-99-den.cfg"),
 	mode => "0644",
 }
 
@@ -103,7 +104,7 @@ exec "locales-v1" {
 # keeps it from drifting. The content must match the installer's exactly.
 file "/etc/sudoers.d/den" {
 	state => "exists",
-	content => "dmikalova ALL=(ALL) NOPASSWD: ALL\n",
+	content => deploy.readfile("/files/sudoers-den"),
 	mode => "0440",
 }
 
@@ -115,12 +116,10 @@ exec "enable-linger" {
 	creates => "/var/lib/systemd/linger/dmikalova",
 }
 
-# Tailscale is one exec rather than a pkg resource because its apt repo has to
-# exist before the package is visible, and den is reached over the LAN until
-# this runs. Enrol it afterwards, once, by hand:
+# Enrol afterwards, once, by hand:
 #   sudo tailscale up --ssh --advertise-tags=tag:server
 exec "tailscale-v1" {
-	cmd => "set -euo pipefail; . /etc/os-release; base=https://pkgs.tailscale.com/stable/ubuntu; curl -fsSL \"\$base/\${VERSION_CODENAME}.noarmor.gpg\" -o /usr/share/keyrings/tailscale-archive-keyring.gpg; curl -fsSL \"\$base/\${VERSION_CODENAME}.tailscale-keyring.list\" -o /etc/apt/sources.list.d/tailscale.list; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale; touch /var/lib/den/tailscale-v1",
+	cmd => deploy.readfile("/files/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
 }
@@ -131,11 +130,9 @@ svc "smartd" {
 	startup => "enabled",
 }
 
-# Default deny inbound. The LAN rule is not optional: den is reached over the
-# LAN during bootstrap, before it is on the tailnet, and losing it means a trip
-# to the physical console. Bump the sentinel version to reapply.
+# Bump the sentinel version to reapply.
 exec "ufw-policy-v1" {
-	cmd => "ufw --force reset && ufw default deny incoming && ufw default allow outgoing && ufw allow in on tailscale0 && ufw allow from 192.168.0.0/24 to any port 22 proto tcp && ufw allow from 192.168.0.0/24 to any port 5353 proto udp && ufw --force enable && touch /var/lib/den/ufw-policy-v1",
+	cmd => deploy.readfile("/files/ufw-policy.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/ufw-policy-v1",
 }
@@ -145,7 +142,7 @@ exec "ufw-policy-v1" {
 # config file, so mgmt owns it and runs nothing itself.
 file "/etc/apt/apt.conf.d/20auto-upgrades" {
 	state => "exists",
-	content => "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n",
+	content => deploy.readfile("/files/20auto-upgrades"),
 	mode => "0644",
 }
 
@@ -163,28 +160,26 @@ file "/etc/apt/apt.conf.d/20auto-upgrades" {
 #   3. a dead man notification exists to report the host did not come back
 file "/etc/apt/apt.conf.d/52den-unattended" {
 	state => "exists",
-	content => "Unattended-Upgrade::Allowed-Origins { \"\${distro_id}:\${distro_codename}-updates\"; };\nUnattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";\nUnattended-Upgrade::Remove-Unused-Dependencies \"true\";\nUnattended-Upgrade::Automatic-Reboot \"false\";\n",
+	content => deploy.readfile("/files/52den-unattended"),
 	mode => "0644",
 }
 
-# The drift catcher. den pulls its own config; nothing outside pushes to it.
-# The pull drops to the owning user so git does not refuse the checkout as
-# dubiously owned, then mgmt converges as root.
+# The drift catcher.
 file "/usr/local/bin/den-reconcile" {
 	state => "exists",
-	content => "#!/bin/bash\nset -euo pipefail\nrunuser -u dmikalova -- git -C /srv/den-config pull --ff-only\ncd /srv/den-config/mgmt\nexec mgmt run --converger-timeout 5 --converged-exit lang main.mcl\n",
+	content => deploy.readfile("/files/den-reconcile"),
 	mode => "0755",
 }
 
 file "/etc/systemd/system/den-reconcile.service" {
 	state => "exists",
-	content => "[Unit]\nDescription=Pull den's config and converge it\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/den-reconcile\n",
+	content => deploy.readfile("/files/den-reconcile.service"),
 	mode => "0644",
 }
 
 file "/etc/systemd/system/den-reconcile.timer" {
 	state => "exists",
-	content => "[Unit]\nDescription=Reconcile den daily\n\n[Timer]\nOnCalendar=daily\nRandomizedDelaySec=30m\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n",
+	content => deploy.readfile("/files/den-reconcile.timer"),
 	mode => "0644",
 }
 

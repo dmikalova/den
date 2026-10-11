@@ -1,7 +1,20 @@
 # The root layer
 
-`den apply` runs `mgmt run --converger-timeout 5 --converged-exit lang main.mcl`
-on den, as root, from a clone of this repo at `/srv/den-config`.
+`den apply` runs
+`mgmt run --converger-timeout 5 --converged-exit lang metadata.yaml` on den, as
+root, from a clone of this repo at `/srv/den-config`.
+
+`main.mcl` is the root layer. `metadata.yaml` is the entrypoint only because a
+naked `.mcl` file cannot see `files/`.
+
+## Why file contents live in files/
+
+Config bodies and shell scripts are real files under `files/`, pulled in with
+`deploy.readfile`. mcl interpolates `$name` and `${name}` inside strings, so an
+inline body has to escape every dollar. That is not only tedious: the
+`${distro_id}` in the unattended-upgrades policy is meant for apt, and had mcl
+resolved it the result would have been a silently wrong policy. Real files also
+let shellcheck read the scripts.
 
 ## Why mgmt and not a dotfile manager
 
