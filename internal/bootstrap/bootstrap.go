@@ -246,10 +246,18 @@ git -C "$dir" --no-pager log -1 --oneline
 // Autoedges are skipped because the stage takes ~2 minutes on this config and
 // the converger calls that quiet time "converged", so mgmt exited before any
 // resource ran. Upstream disables it for the same reason (purpleidea/mgmt#840,
-// #739). Nothing here declares a Depend, so the implied edges are not missed.
+// #739). This only drops the inferred edges; the few explicit Depends in
+// main.mcl still apply.
+//
+// The timeout is load bearing. --converged-exit only fires once the graph is
+// actually converged, so a resource that keeps failing means mgmt never exits.
+// It also holds etcd's port 2380, which makes every later run, including the
+// scheduled reconcile, die on "address already in use" until someone kills it
+// by hand. INT first because mgmt tears down etcd cleanly on it.
 const runMgmt = `set -euo pipefail
 cd %s/mgmt
-mgmt run --no-autoedges --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
+timeout --signal=INT --kill-after=30s 30m \
+  mgmt run --no-autoedges --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
 `
 
 // joinTailnet enrols den once, after the converge step that installs the

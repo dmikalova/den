@@ -6,3 +6,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/den-reconcile
+# Type=oneshot has no start timeout by default. mgmt only exits once the graph
+# converges, so one resource that keeps failing leaves it running forever while
+# holding etcd's port 2380, and every later run dies on "address already in
+# use". Bound it so a bad converge costs one cycle, not the whole timer.
+TimeoutStartSec=30min

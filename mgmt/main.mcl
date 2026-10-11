@@ -231,11 +231,16 @@ file "/etc/systemd/system/den-reconcile.timer" {
 }
 
 # Not a svc resource: mgmt appends .service to the name, so it looks for
-# den-reconcile.timer.service and fails. The wants symlink is the real state.
-exec "den-reconcile-timer-v1" {
-	cmd => "systemctl daemon-reload && systemctl enable --now den-reconcile.timer",
+# den-reconcile.timer.service and fails.
+#
+# The guard is a sentinel rather than the wants symlink, which is what it used
+# to be. The symlink exists after the first enable, so editing either unit
+# afterwards never reloaded systemd and the old unit stayed live. Bump the
+# version to pick up a unit change.
+exec "den-reconcile-units-v2" {
+	cmd => "systemctl daemon-reload && systemctl enable --now den-reconcile.timer && touch /var/lib/den/den-reconcile-units-v2",
 	shell => "/bin/bash",
-	creates => "/etc/systemd/system/timers.target.wants/den-reconcile.timer",
+	creates => "/var/lib/den/den-reconcile-units-v2",
 
-	Depend => File["/etc/systemd/system/den-reconcile.timer"],
+	Depend => File["/etc/systemd/system/den-reconcile.service"],
 }
