@@ -111,6 +111,10 @@ jobs:
   release:
     name: publish
     needs: build
+    # A push to main cuts a den release in a parallel workflow, so on push there
+    # is no release to attach to yet. Build anyway to prove it still compiles,
+    # and leave publishing to the release event that follows.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
