@@ -1,0 +1,61 @@
+name: mgmt lang
+
+# mcl is not Go, so the local gate never looks at it and a typo in main.mcl is
+# only found by a converge against the real host. mgmt type checks the whole
+# tree in milliseconds without starting the engine, so do it here.
+#
+# This is CI only on purpose: mgmt is a Linux daemon and is not installed on the
+# machine that runs mage ci:check.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mgmt/**"
+      - ".github/workflows/mgmt-lang.yaml"
+  pull_request:
+    paths:
+      - "mgmt/**"
+      - ".github/workflows/mgmt-lang.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unify:
+    name: type check mcl
+    runs-on: ubuntu-latest
+    # Same reason as mgmt.yaml: the binary links against 26.04 sonames and the
+    # runner image is older.
+    container: ubuntu:26.04
+    steps:
+      - name: install runtime dependencies
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git libaugeas0 libvirt0 libpcap0.8
+
+      - uses: actions/checkout@v5
+
+      - name: install mgmt
+        run: |
+          set -euo pipefail
+          # bootstrap.go is the one place the version is declared.
+          want=$(grep -oP 'DefaultMgmtVersion = "\K[^"]+' internal/bootstrap/bootstrap.go)
+          bin=mgmt-linux-amd64-${want}
+          base=https://github.com/dmikalova/den/releases/latest/download
+          curl -fsSL -o "$bin" "$base/$bin"
+          curl -fsSL -o mgmt-SHA256SUMS "$base/mgmt-SHA256SUMS"
+          grep "  $bin\$" mgmt-SHA256SUMS | sha256sum -c -
+          install -m 0755 "$bin" /usr/local/bin/mgmt
+          rm -f "$bin" mgmt-SHA256SUMS
+
+      # metadata.yaml, not main.mcl: a naked mcl file cannot see files/.
+      - name: type check
+        run: |
+          set -euo pipefail
+          cd mgmt
+          mgmt run lang --only-unify ./metadata.yaml

@@ -124,12 +124,51 @@ exec "enable-linger" {
 	creates => "/var/lib/systemd/linger/dmikalova",
 }
 
+# Ubuntu's dynamic motd is release upsell and a news feed that each login waits
+# on. .hushlogin silences the whole thing, including the last login line,
+# without deleting package files that an upgrade would put back.
+#
+# root as well as the operator: reconcile and CI log in as root.
+file "/home/dmikalova/.hushlogin" {
+	state => "exists",
+	owner => "dmikalova",
+	group => "dmikalova",
+	mode => "0644",
+}
+
+file "/root/.hushlogin" {
+	state => "exists",
+	owner => "root",
+	group => "root",
+	mode => "0644",
+}
+
 # Enrolment is den apply's last step, not this one: the key cannot live in a
 # public repo. This only installs the package.
 exec "tailscale-v1" {
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
+}
+
+file "/etc/default/tailscaled" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/default/tailscaled"),
+	mode => "0644",
+}
+
+# tailscaled only reads its flags at start, so the file alone changes nothing.
+# Bump the sentinel to restart it after editing the flags.
+#
+# If the TPM ever refuses to unseal, tailscaled comes up without an identity and
+# den drops off the tailnet. LAN ssh is unaffected, so the way back is
+# den apply --host den.local.
+exec "tailscaled-flags-v1" {
+	cmd => "systemctl restart tailscaled && touch /var/lib/den/tailscaled-flags-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/tailscaled-flags-v1",
+
+	Depend => File["/etc/default/tailscaled"],
 }
 
 # Drives idle down on their own; smartd is what notices one dying first.

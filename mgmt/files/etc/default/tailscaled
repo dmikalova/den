@@ -1,0 +1,10 @@
+# Set the port to listen on for incoming VPN packets.
+# Remote nodes will automatically be informed about the new port number,
+# but you might want to configure this in order to set external firewall
+# settings.
+PORT="41641"
+
+# --encrypt-state seals the node key to den's TPM, so lifting the disk does not
+# hand over a working tailnet identity. The root filesystem is already LUKS2,
+# but that only helps while the machine is off.
+FLAGS="--encrypt-state"
