@@ -5,3 +5,11 @@ Unattended-Upgrade::Allowed-Origins {
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 Unattended-Upgrade::Automatic-Reboot "false";
+
+// /boot is a separate ext4 partition, so it is outside every snapshot. Rolling
+// @ back across a kernel upgrade boots whatever /boot still holds, and the
+// matching modules only exist under /lib/modules in the snapshot. Keeping five
+// kernels means the GRUB menu still offers one a restored root can run.
+// Applies to every autoremove, not just unattended-upgrades. Default is 2, and
+// a value below 2 is ignored. Five is ~515 MB of the 2 GB partition.
+APT::NeverAutoRemove::KernelCount "5";
