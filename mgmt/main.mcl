@@ -120,7 +120,7 @@ exec "enable-linger" {
 # this runs. Enrol it afterwards, once, by hand:
 #   sudo tailscale up --ssh --advertise-tags=tag:server
 exec "tailscale-v1" {
-	cmd => "set -euo pipefail; . /etc/os-release; base=https://pkgs.tailscale.com/stable/ubuntu; curl -fsSL \"$base/${VERSION_CODENAME}.noarmor.gpg\" -o /usr/share/keyrings/tailscale-archive-keyring.gpg; curl -fsSL \"$base/${VERSION_CODENAME}.tailscale-keyring.list\" -o /etc/apt/sources.list.d/tailscale.list; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale; touch /var/lib/den/tailscale-v1",
+	cmd => "set -euo pipefail; . /etc/os-release; base=https://pkgs.tailscale.com/stable/ubuntu; curl -fsSL \"\$base/\${VERSION_CODENAME}.noarmor.gpg\" -o /usr/share/keyrings/tailscale-archive-keyring.gpg; curl -fsSL \"\$base/\${VERSION_CODENAME}.tailscale-keyring.list\" -o /etc/apt/sources.list.d/tailscale.list; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale; touch /var/lib/den/tailscale-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
 }
@@ -163,7 +163,7 @@ file "/etc/apt/apt.conf.d/20auto-upgrades" {
 #   3. a dead man notification exists to report the host did not come back
 file "/etc/apt/apt.conf.d/52den-unattended" {
 	state => "exists",
-	content => "Unattended-Upgrade::Allowed-Origins { \"${distro_id}:${distro_codename}-updates\"; };\nUnattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";\nUnattended-Upgrade::Remove-Unused-Dependencies \"true\";\nUnattended-Upgrade::Automatic-Reboot \"false\";\n",
+	content => "Unattended-Upgrade::Allowed-Origins { \"\${distro_id}:\${distro_codename}-updates\"; };\nUnattended-Upgrade::Remove-Unused-Kernel-Packages \"true\";\nUnattended-Upgrade::Remove-Unused-Dependencies \"true\";\nUnattended-Upgrade::Automatic-Reboot \"false\";\n",
 	mode => "0644",
 }
 

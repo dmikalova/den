@@ -130,13 +130,16 @@ test "$arch" = amd64
 `
 
 // patch installs only what the rest of bootstrap needs: curl fetches the mgmt
-// binary, git clones the config repo, ca-certificates makes both verify. The
+// binary, git clones the config repo, ca-certificates makes both verify, and
+// the two library packages are what mgmt itself is linked against. The
 // full-upgrade that used to live here is deliberately absent. It is slow, it
 // can pull a kernel, and nothing downstream depends on it.
 const patch = `set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y ca-certificates curl git
+# Recommends off: mgmt wants the client libraries, not a hypervisor.
+apt-get install -y --no-install-recommends libaugeas0 libvirt0
 `
 
 // installMgmt checks the binary against the sums file published with the
