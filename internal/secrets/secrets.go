@@ -1,5 +1,6 @@
-// Package secrets reads a SOPS-encrypted JSON file. den shells out to the
-// sops binary so the age key never passes through this process.
+// Package secrets reads a SOPS-encrypted JSON file, and reads GCP Secret
+// Manager through gcloud. den shells out in both cases so neither the age key
+// nor a GCP credential passes through this process.
 package secrets
 
 import (
@@ -17,6 +18,25 @@ import (
 type Install struct {
 	Password       string `json:"PASSWORD"`
 	LUKSPassphrase string `json:"LUKS_PASSPHRASE"`
+}
+
+// Access returns the newest version of a GCP Secret Manager secret, using
+// whatever credentials gcloud already holds.
+func Access(ctx context.Context, project, name string) (string, error) {
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		return "", fmt.Errorf("gcloud is not installed: brew install --cask gcloud-cli")
+	}
+
+	cmd := exec.CommandContext(ctx, "gcloud", "secrets", "versions", "access", "latest",
+		"--secret="+name, "--project="+project)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("reading secret %s: %w: %s",
+			name, err, strings.TrimSpace(stderr.String()))
+	}
+	return string(bytes.TrimSpace(out)), nil
 }
 
 // Load decrypts path and returns the install secrets it holds.

@@ -23,6 +23,11 @@ const DefaultConfigRepo = "https://github.com/dmikalova/den.git"
 // DefaultConfigDir is where that remote is cloned on den.
 const DefaultConfigDir = "/srv/den-config"
 
+// DefaultTailscaleTag is the policy tag den advertises when it enrols. The
+// tailnet policy matches CI's reach on this exact string, so changing it here
+// means changing the tailnet stack too.
+const DefaultTailscaleTag = "tag:den"
+
 // Options are the knobs both passes share.
 type Options struct {
 	User        string
@@ -33,6 +38,11 @@ type Options struct {
 	// Terminfo is the operator's own terminal description, as infocmp -x
 	// emits it. Empty skips the step.
 	Terminfo string
+
+	// TailscaleKey is a preauthorized tailnet key. Empty skips the join, which
+	// is what happens when the operator has no gcloud credentials.
+	TailscaleKey string
+	TailscaleTag string
 
 	// Noop runs mgmt in report-only mode.
 	Noop bool
@@ -79,7 +89,7 @@ func Apply(o Options) []Step {
 	if o.Noop {
 		noop = " --noop"
 	}
-	return []Step{
+	steps := []Step{
 		{
 			Name:   "make the config directory",
 			Root:   true,
@@ -95,6 +105,14 @@ func Apply(o Options) []Step {
 			Script: fmt.Sprintf(runMgmt, o.ConfigDir, noop),
 		},
 	}
+	if o.TailscaleKey != "" {
+		steps = append(steps, Step{
+			Name:   "join the tailnet",
+			Root:   true,
+			Script: fmt.Sprintf(joinTailnet, o.TailscaleTag, o.TailscaleKey),
+		})
+	}
+	return steps
 }
 
 // Run executes steps in order and stops at the first failure.
@@ -216,4 +234,31 @@ git -C "$dir" --no-pager log -1 --oneline
 const runMgmt = `set -euo pipefail
 cd %s/mgmt
 mgmt run --converger-timeout 5 --converged-exit%s lang ./metadata.yaml
+`
+
+// joinTailnet enrols den once, after the converge step that installs the
+// tailscale package. Already being up is the guard, so this is a no-op on
+// every run after the first.
+//
+// --ssh is what lets CI in at all, and the tag is what the tailnet policy
+// matches on. Neither is optional.
+//
+// The key goes via file: rather than inline, so it is never an argv entry that
+// any local user could read out of /proc. /run is tmpfs, so the file it passes
+// through never reaches a disk.
+const joinTailnet = `set -euo pipefail
+if ! command -v tailscale >/dev/null; then
+  echo "tailscale is not installed yet; converge without --noop first"
+  exit 0
+fi
+if tailscale status --json 2>/dev/null | grep -q '"BackendState": *"Running"'; then
+  echo "already on the tailnet"
+  exit 0
+fi
+umask 077
+key=$(mktemp /run/den-authkey.XXXXXX)
+trap 'rm -f "$key"' EXIT
+printf '%%s' '%[2]s' > "$key"
+tailscale up --ssh --advertise-tags=%[1]s --auth-key="file:$key"
+tailscale status --peers=false
 `

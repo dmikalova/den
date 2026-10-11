@@ -116,8 +116,8 @@ exec "enable-linger" {
 	creates => "/var/lib/systemd/linger/dmikalova",
 }
 
-# Enrol afterwards, once, by hand:
-#   sudo tailscale up --ssh --advertise-tags=tag:server
+# Enrolment is den apply's last step, not this one: the key cannot live in a
+# public repo. This only installs the package.
 exec "tailscale-v1" {
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",

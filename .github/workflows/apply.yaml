@@ -6,8 +6,9 @@ name: apply
 #
 # TODO: restore the push trigger once three things are true. Until then every
 # push to mgmt/** fails here, which trains us to ignore a red run.
-#   1. TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET exist as repo secrets
-#   2. den is on the tailnet, which needs the tailscale-v1 exec to have run
+#   1. dmikalova/den carries a workloadIdentityUser binding for the tailscale
+#      secrets, applied from the infrastructure repo
+#   2. den has joined the tailnet as tag:den with --ssh
 #   3. /usr/local/bin/den-reconcile exists on den
 #
 # on:
@@ -23,6 +24,10 @@ concurrency:
   group: apply
   cancel-in-progress: false
 
+env:
+  GCP_PROJECT: mklv-infrastructure
+  WIF_PROVIDER: projects/443065563587/locations/global/workloadIdentityPools/github/providers/github-oidc
+
 jobs:
   apply:
     name: converge den
@@ -31,11 +36,35 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # No service account to impersonate: Secret Manager grants read to this
+      # repository's own federated identity, so the token is the whole claim.
+      - name: authenticate to gcp
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # Neither value is a credential. They are read here rather than written
+      # into this file so the infrastructure repo stays the only author.
+      - name: read tailscale identity
+        run: |
+          set -euo pipefail
+          for key in client-id audience; do
+            var=$(echo "TS_${key}" | tr 'a-z-' 'A-Z_')
+            value=$(gcloud secrets versions access latest \
+              --secret="tailscale-ci-den-${key}" \
+              --project="$GCP_PROJECT")
+            echo "${var}=${value}" >> "$GITHUB_ENV"
+          done
+
+      # Workload identity federation again, this time to Tailscale: the runner
+      # proves who it is with its own OIDC token and no secret is stored.
       - name: join the tailnet
         uses: tailscale/github-action@v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          oauth-client-id: ${{ env.TS_CLIENT_ID }}
+          audience: ${{ env.TS_AUDIENCE }}
           tags: tag:ci
           hostname: den-apply
           ping: den
