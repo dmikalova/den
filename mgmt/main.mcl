@@ -15,6 +15,7 @@ import "os"
 pkg [
 	"btrfs-progs",
 	"fuse-overlayfs",
+	"lm-sensors",
 	"mergerfs",
 	"ncurses-term",
 	"passt",
