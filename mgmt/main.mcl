@@ -33,6 +33,10 @@ pkg [
 	state => "installed",
 	allowunsupported => os.is_family_debian() ?: true,
 
+	# The NVIDIA driver is in Ubuntu's restricted component, which PackageKit
+	# reports as non-free. Without this it will not even resolve the name.
+	allownonfree => true,
+
 	# systemd's apt-daily.timer can hold the apt lock when this runs, and
 	# PackageKit cannot wait for it. apt-daily finishes in seconds, so retry.
 	Meta:retry => 3,
