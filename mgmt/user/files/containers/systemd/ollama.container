@@ -1,0 +1,38 @@
+[Unit]
+Description=Ollama, the local model runner
+# The weights live on /srv/models, so the container must not start before that
+# filesystem is there. A missing bind source would otherwise be created as an
+# empty directory and the models would look deleted.
+RequiresMountsFor=/srv/models
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=ollama
+# Pinned. The alternative is :latest with AutoUpdate, which swaps the runtime
+# under a working model without anyone asking for it.
+Image=docker.io/ollama/ollama:0.40.3
+# CDI, not a runtime wrapper: this container is rootless and cannot write the
+# device cgroup. The spec is regenerated each boot by nvidia-cdi-refresh.
+AddDevice=nvidia.com/gpu=all
+# Model weights are large and re-downloadable, which is why /srv/models is
+# excluded from backup. Keeping them outside the container means a version
+# bump does not re-download them.
+Volume=/srv/models/ollama:/root/.ollama
+# Loopback only. The API has no authentication, so nothing but den talks to it
+# directly; anything off-host goes through Caddy on the tailnet.
+PublishPort=127.0.0.1:11434:11434
+# A 14B model takes about ten seconds to load into VRAM. Half an hour of idle
+# keeps it resident across a working session without holding the card all day.
+Environment=OLLAMA_KEEP_ALIVE=30m
+# One model at a time. The card has 20 GiB, and a second model loading beside
+# the first is how you get a silent fall back to CPU.
+Environment=OLLAMA_MAX_LOADED_MODELS=1
+
+[Service]
+Restart=always
+# The first start pulls the image, which is several gigabytes.
+TimeoutStartSec=600
+
+[Install]
+WantedBy=default.target

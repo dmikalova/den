@@ -14,4 +14,20 @@ cd /srv/den-config/mgmt
 # --converger-timeout is a quiescence window, not a per-resource deadline: mgmt
 # exits once the whole graph has been still for this many seconds. 30s costs 25
 # extra seconds on an idle run and buys a margin against the same class of bug.
-exec mgmt run --no-autoedges --converger-timeout 30 --converged-exit lang ./metadata.yaml
+mgmt run --no-autoedges --converger-timeout 30 --converged-exit lang ./metadata.yaml
+
+# The user layer. It converges as the login user because its resources are that
+# user's files and that user's units, and root would own both if root made
+# them. It runs second because its quadlets depend on what root installs:
+# lingering, the mounts, the CDI spec.
+#
+# runuser does not build a login environment, so mgmt gets HOME and the user
+# bus explicitly. Without XDG_RUNTIME_DIR, systemctl --user has no bus to talk
+# to and the quadlet script fails on the first line.
+uid="$(id -u dmikalova)"
+cd /srv/den-config/mgmt/user
+exec runuser -u dmikalova -- env \
+	HOME=/home/dmikalova \
+	XDG_RUNTIME_DIR="/run/user/${uid}" \
+	mgmt run --no-autoedges --converger-timeout 30 --converged-exit \
+	--prefix /home/dmikalova/.local/state/mgmt lang ./metadata.yaml

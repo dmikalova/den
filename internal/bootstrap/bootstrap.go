@@ -105,6 +105,10 @@ func Apply(o Options) []Step {
 			Root:   true,
 			Script: fmt.Sprintf(runMgmt, o.ConfigDir, noop),
 		},
+		{
+			Name:   "converge the user layer",
+			Script: fmt.Sprintf(runUserMgmt, o.ConfigDir, noop),
+		},
 	}
 	if o.TailscaleKey != "" {
 		steps = append(steps, Step{
@@ -270,6 +274,20 @@ const runMgmt = `set -euo pipefail
 cd %s/mgmt
 timeout --signal=INT --kill-after=30s 30m \
   mgmt run --no-autoedges --converger-timeout 30 --converged-exit%s lang ./metadata.yaml
+`
+
+// runUserMgmt converges the user layer. It is not a root step: its resources
+// are the login user's files and the login user's units, and root making them
+// is how a rootless service ends up unable to start.
+//
+// It gets its own state prefix because two mgmt runs sharing one would fight
+// over etcd, and the user cannot write the default prefix anyway.
+const runUserMgmt = `set -euo pipefail
+cd %s/mgmt/user
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+timeout --signal=INT --kill-after=30s 30m \
+  mgmt run --no-autoedges --converger-timeout 30 --converged-exit%s \
+  --prefix "$HOME/.local/state/mgmt" lang ./metadata.yaml
 `
 
 // joinTailnet enrols den once, after the converge step that installs the

@@ -1,0 +1,46 @@
+# den's user layer.
+#
+# Everything den serves runs here: rootless Podman quadlets in the login user's
+# home, started by that user's own systemd. The root layer owns the ground they
+# stand on and nothing more.
+#
+# This converges as dmikalova, with its own state under ~/.local/state, because
+# its resources are that user's files and that user's units. Converging it as
+# root would leave them owned by root, which is the one reliable way to stop a
+# rootless service from starting.
+#
+# den-reconcile runs this after the root layer. See ../README.md.
+
+import "deploy"
+
+# The quadlet directory. mgmt writes a file, it does not build the path to it,
+# so the parents have to be resources too.
+#
+# No mode on the directories. Setting one makes the resource flap: mgmt chmods,
+# sees its own change, and chmods again, several times a second for the life of
+# the run. The default a fresh directory gets is already 0755.
+file "/home/dmikalova/.config/containers/" {
+	state => "exists",
+}
+
+file "/home/dmikalova/.config/containers/systemd/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/ollama.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/ollama.container"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/"],
+}
+
+exec "quadlets-v1" {
+	cmd => deploy.readfile("/files/scripts/quadlets.sh"),
+	shell => "/bin/bash",
+	creates => "/home/dmikalova/.local/state/den/quadlets-v1",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container"],
+}

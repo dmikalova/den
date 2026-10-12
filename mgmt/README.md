@@ -53,8 +53,34 @@ concern. zram is a package and a config file, so it is a mgmt concern. See
 
 - No secrets. Secrets come from Bitwarden at run time, never from this repo.
 - Root only. Anything the login user can own belongs in their home, under
-  their own systemd, not here.
+  their own systemd, in [user/](user/), not here.
 - Every `exec` needs a `creates` or equivalent, or the run is not idempotent.
+
+## The user layer
+
+[user/](user/) is a second mgmt tree, converged as `dmikalova` straight after
+this one. It holds the quadlets: the services den actually serves.
+
+It is a separate run rather than a section of `main.mcl` because the two differ
+in who they run as, and that is not something one graph can express. A file
+this layer writes has to be owned by the login user, and a unit it starts has
+to reach that user's systemd. Root making either of those is the reliable way
+to end up with a rootless service that cannot start.
+
+It is still mgmt, so there is one tool to learn, not two. What differs is the
+invocation: its own `--prefix` under `~/.local/state/mgmt`, because two runs
+sharing one state directory fight over etcd.
+
+Two things about that environment are worth knowing before writing a script
+here, because both fail late and quietly:
+
+- mgmt gives `exec` a bare environment. `HOME` is unset, so `set -u` fails the
+  script on the first line that uses it, which is usually the sentinel at the
+  end, after the expensive work has already run.
+- `systemctl --user` needs `XDG_RUNTIME_DIR`. Without it there is no bus.
+
+Directory resources here take no `mode`. Setting one makes the resource flap:
+mgmt chmods, sees its own change, and chmods again for the life of the run.
 
 ## Seeing what would change
 

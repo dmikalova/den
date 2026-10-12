@@ -1,0 +1,33 @@
+set -euo pipefail
+
+# mgmt hands its exec resources a bare environment: no HOME, no bus address.
+# Derive both rather than assume them. Without HOME, set -u fails this script
+# on the last line, after the work is already done, so the sentinel is never
+# written and every later run repeats a nine gigabyte pull.
+HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+export HOME
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+# Quadlets are not enabled the way ordinary units are. A generator reads the
+# .container file at daemon-reload and writes the service, so the reload is
+# what installs it and [Install] in the file is what starts it at boot. There
+# is no ollama.service on disk to enable, and trying produces a unit not found.
+systemctl --user daemon-reload
+systemctl --user start ollama.service
+
+# Wait for the API rather than the container, because the container is up well
+# before the server is listening and the pull below would race it.
+for _ in $(seq 60); do
+	if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+		break
+	fi
+	sleep 2
+done
+
+# The weights are not in the image. Pulling here means the first request is
+# fast instead of blocking for nine gigabytes, and it is idempotent: ollama
+# checks the manifest and returns immediately when the model is already local.
+podman exec ollama ollama pull qwen3:14b
+
+mkdir -p "${HOME}/.local/state/den"
+touch "${HOME}/.local/state/den/quadlets-v1"
