@@ -1,6 +1,5 @@
-// Package secrets reads a SOPS-encrypted JSON file, and reads GCP Secret
-// Manager through gcloud. den shells out in both cases so neither the age key
-// nor a GCP credential passes through this process.
+// Package secrets reads GCP Secret Manager through gcloud, so no GCP
+// credential passes through this process.
 package secrets
 
 import (
@@ -60,32 +59,4 @@ func AccessKey(ctx context.Context, project, name, key string) (string, error) {
 		return "", fmt.Errorf("secret %s has no %s", name, key)
 	}
 	return value, nil
-}
-
-// Load decrypts path and returns the install secrets it holds.
-func Load(ctx context.Context, path string) (Install, error) {
-	if _, err := exec.LookPath("sops"); err != nil {
-		return Install{}, fmt.Errorf("sops is not installed: brew install sops")
-	}
-
-	cmd := exec.CommandContext(ctx, "sops", "-d", path)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return Install{}, fmt.Errorf("sops -d %s: %w: %s",
-			path, err, strings.TrimSpace(stderr.String()))
-	}
-
-	var s Install
-	if err := json.Unmarshal(out, &s); err != nil {
-		return Install{}, fmt.Errorf("%s does not decrypt to JSON: %w", path, err)
-	}
-	if s.Password == "" {
-		return Install{}, fmt.Errorf("%s has no PASSWORD", path)
-	}
-	if s.LUKSPassphrase == "" {
-		return Install{}, fmt.Errorf("%s has no LUKS_PASSPHRASE", path)
-	}
-	return s, nil
 }

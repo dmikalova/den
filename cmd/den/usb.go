@@ -21,8 +21,9 @@ import (
 // defaultRelease is the Ubuntu Server release den installs.
 const defaultRelease = "26.04.1"
 
-// defaultSecrets holds the console password hash and the LUKS passphrase.
-const defaultSecrets = "secrets/install.sops.json"
+// The console password and the LUKS passphrase come from the same secret the
+// infrastructure repo writes. Keeping a SOPS copy in this repo would be a
+// second source of truth for values that must match the installed machine.
 
 func usb(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
@@ -50,16 +51,25 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 		hostname = fs.String("hostname", "den", "host name of the installed system")
 		user     = fs.String("user", "dmikalova", "the one login account")
 		keyPath  = fs.String("ssh-key", defaultKey(), "OpenSSH public key allowed to log in")
-		secrets  = fs.String("secrets", defaultSecrets, "SOPS file holding the install secrets")
+		project  = fs.String(
+			"gcp-project",
+			defaultProject,
+			"GCP project holding the install secret",
+		)
+		secret = fs.String(
+			"install-secret",
+			defaultInstallSecret,
+			"Secret Manager secret holding the install secrets",
+		)
 		passPath = fs.String(
 			"password-file",
 			"",
-			"file holding the console password; overrides --secrets",
+			"file holding the console password; overrides the secret",
 		)
 		luksPath = fs.String(
 			"luks-passphrase-file",
 			"",
-			"file holding the LUKS passphrase; overrides --secrets",
+			"file holding the LUKS passphrase; overrides the secret",
 		)
 		timeout = fs.Int("menu-timeout", 1, "seconds GRUB waits before it starts the install")
 	)
@@ -71,7 +81,7 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	install, err := loadInstallSecrets(ctx, *secrets, *passPath, *luksPath)
+	install, err := loadInstallSecrets(ctx, *project, *secret, *passPath, *luksPath)
 	if err != nil {
 		return err
 	}
@@ -226,30 +236,33 @@ func readKey(path string) ([]string, error) {
 	return keys, scan.Err()
 }
 
-// loadInstallSecrets prefers the explicit files, and only decrypts the SOPS
-// file for whatever they do not supply.
+// loadInstallSecrets prefers the explicit files, and only reaches for the
+// secret to fill in what they do not supply. The files exist so a rebuild is
+// possible when GCP is unreachable.
 func loadInstallSecrets(
 	ctx context.Context,
-	sopsPath, passPath, luksPath string,
+	project, secret, passPath, luksPath string,
 ) (secrets.Install, error) {
 	var install secrets.Install
 	var err error
 
-	if passPath == "" || luksPath == "" {
-		if install, err = secrets.Load(ctx, sopsPath); err != nil {
+	if passPath == "" {
+		if install.Password, err = secrets.AccessKey(ctx, project, secret, "PASSWORD"); err != nil {
 			return install, err
 		}
+	} else if install.Password, err = readTrimmed(passPath); err != nil {
+		return install, err
 	}
-	if passPath != "" {
-		if install.Password, err = readTrimmed(passPath); err != nil {
+
+	if luksPath == "" {
+		install.LUKSPassphrase, err = secrets.AccessKey(ctx, project, secret, "LUKS_PASSPHRASE")
+		if err != nil {
 			return install, err
 		}
+	} else if install.LUKSPassphrase, err = readTrimmed(luksPath); err != nil {
+		return install, err
 	}
-	if luksPath != "" {
-		if install.LUKSPassphrase, err = readTrimmed(luksPath); err != nil {
-			return install, err
-		}
-	}
+
 	return install, nil
 }
 

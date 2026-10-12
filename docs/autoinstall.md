@@ -6,20 +6,18 @@ installer then runs with no questions and reboots into a host you can SSH to.
 
 ## Build the image
 
-The build needs `xorriso`, `gpg` and `sops`:
+The build needs `xorriso`, `gpg` and `gcloud`:
 
 ```sh
-brew install xorriso gnupg sops
+brew install xorriso gnupg
+brew install --cask gcloud-cli
 ```
 
-The install secrets live in `secrets/install.sops.json`, encrypted to the age
-key in Bitwarden. Create it once:
+The install secrets live in the `den-install` secret in GCP Secret Manager,
+written by the infrastructure repo. That secret carries no IAM binding, so
+only a project admin reads it, which is what keeps den itself out of it.
 
-```sh
-sops secrets/install.sops.json
-```
-
-It holds two keys:
+It holds two keys the build uses:
 
 | Key               | What it is                                        |
 | ----------------- | ------------------------------------------------- |
@@ -29,6 +27,8 @@ It holds two keys:
 Keep these different. `PASSWORD` is typed often, so it must be easy to type.
 `LUKS_PASSPHRASE` faces offline brute force if the disk is ever stolen, so it
 must be long and random. After the TPM is enrolled you never type it.
+
+Pass `--password-file` or `--luks-passphrase-file` to build without GCP.
 
 Build:
 
@@ -294,22 +294,18 @@ Enter it once. The TPM takes over from the second boot.
    sudo tailscale up --ssh
    ```
 
-4. Put the age key in place. Copy it from Bitwarden:
-
-   ```sh
-   sudo install -d -m 700 /var/lib/sops/age
-   sudo tee /var/lib/sops/age/keys.txt > /dev/null   # paste, then Ctrl-D
-   sudo chmod 600 /var/lib/sops/age/keys.txt
-   ```
-
-5. Apply the host config:
+4. Apply the host config:
 
    ```sh
    den bootstrap
    den apply
    ```
 
-6. Confirm the host can reach you:
+   `den apply` also reads den's service account key out of `den-install` and
+   seals it to the TPM, so den can fetch its own secrets from then on. That
+   key is the only credential ever delivered to den.
+
+5. Confirm the host can reach you:
 
    ```sh
    den notify --level ok --title bootstrap

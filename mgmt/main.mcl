@@ -408,9 +408,10 @@ exec "den-notify-units-v1" {
 # The secrets path.
 #
 # den holds exactly one credential, a service account key sealed to this
-# host's TPM, and fetches everything else with it. The sealed key is written
-# by `den secrets seal` during bootstrap and is never in this repository, in
-# SOPS, or in Terraform state.
+# host's TPM, and fetches everything else with it. The key is minted by the
+# infrastructure repo and written here by `den apply`, so it is never in this
+# repository. It does live in that repo's Terraform state, which is therefore
+# as sensitive as this host.
 #
 # den-secrets.service explodes the fetched blob into /run/den/secrets, one
 # file per key, so that a unit declares what it needs with LoadCredential= and
