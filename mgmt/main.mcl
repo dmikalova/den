@@ -18,6 +18,7 @@ pkg [
 	"lm-sensors",
 	"mergerfs",
 	"ncurses-term",
+	"nvidia-driver-595-open",
 	"passt",
 	"podman",
 	"rsync",
@@ -323,6 +324,32 @@ exec "snapraid-units-v1" {
 	creates => "/var/lib/den/snapraid-units-v1",
 
 	Depend => File["/etc/systemd/system/snapraid-scrub.timer"],
+}
+
+# The GPU.
+#
+# The driver is the open kernel module build, which is what NVIDIA supports on
+# Ada and later. Installing it is what takes the card off nouveau; the package
+# blacklists nouveau itself in /usr/lib/modprobe.d, so nothing here repeats it.
+# It needs a reboot to take effect, which mgmt does not do.
+#
+# Containers reach the GPU through CDI rather than a runtime wrapper: the
+# quadlets are rootless, and CDI is the path that does not need a privileged
+# daemon to inject devices.
+file "/etc/systemd/system/nvidia-cdi-refresh.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/nvidia-cdi-refresh.service"),
+	mode => "0644",
+
+	Depend => Exec["snapraid-units-v1"],
+}
+
+exec "nvidia-container-v1" {
+	cmd => deploy.readfile("/files/scripts/nvidia-container.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/nvidia-container-v1",
+
+	Depend => File["/etc/systemd/system/nvidia-cdi-refresh.service"],
 }
 
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits
