@@ -283,6 +283,12 @@ func seal(ctx context.Context, name, out string, plaintext []byte) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("sealing %s: %w: %s", name, err, strings.TrimSpace(stderr.String()))
 	}
+	// systemd-creds writes 0644. The ciphertext is useless off this TPM, but
+	// it is still a credential and the directories are the only thing keeping
+	// it unreadable today.
+	if err := os.Chmod(out, 0o600); err != nil {
+		return fmt.Errorf("securing %s: %w", out, err)
+	}
 	return nil
 }
 
