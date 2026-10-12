@@ -56,6 +56,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = checkHost(ctx, args[1:], stdout, stderr)
 	case args[0] == "notify":
 		err = notifyHost(ctx, args[1:], stdout, stderr)
+	case args[0] == "secrets":
+		err = secretsHost(ctx, args[1:], stdout, stderr)
 	default:
 		err = fmt.Errorf("unknown command %q: %w", args[0], errUsage)
 	}
@@ -81,6 +83,8 @@ Usage:
   den apply [flags]                  converge den's root layer with mgmt
   den check [flags]                  run the smoke checks against a host
   den notify [flags] [message]       report an event to Discord, from den
+  den secrets fetch [flags]          explode den's runtime secret into /run
+  den secrets seal [flags]           seal a service account key to the TPM
   den version
   den help
 

@@ -404,3 +404,48 @@ exec "den-notify-units-v1" {
 
 	Depend => File["/etc/systemd/system/service.d/10-den-onfailure.conf"],
 }
+
+# The secrets path.
+#
+# den holds exactly one credential, a service account key sealed to this
+# host's TPM, and fetches everything else with it. The sealed key is written
+# by `den secrets seal` during bootstrap and is never in this repository, in
+# SOPS, or in Terraform state.
+#
+# den-secrets.service explodes the fetched blob into /run/den/secrets, one
+# file per key, so that a unit declares what it needs with LoadCredential= and
+# systemd copies only that into the unit's own namespace. The unit file is
+# therefore the allowlist, rather than a process asking for whatever it likes.
+
+# No mode: see /var/lib/den/ above.
+file "/etc/den/" {
+	state => "exists",
+
+	Depend => Exec["den-notify-units-v1"],
+}
+
+# No mode: see /var/lib/den/ above.
+file "/etc/den/credentials/" {
+	state => "exists",
+
+	Depend => File["/etc/den/"],
+}
+
+file "/etc/systemd/system/den-secrets.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-secrets.service"),
+	mode => "0644",
+
+	Depend => File["/etc/den/credentials/"],
+}
+
+# Enabled but not started here. The unit needs the sealed key to exist, which
+# `den bootstrap` writes, and starting it before then would fail the converge
+# on a host that is otherwise fine. Bump the version to pick up a unit change.
+exec "den-secrets-units-v1" {
+	cmd => "systemctl daemon-reload && systemctl enable den-secrets.service && touch /var/lib/den/den-secrets-units-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/den-secrets-units-v1",
+
+	Depend => File["/etc/systemd/system/den-secrets.service"],
+}

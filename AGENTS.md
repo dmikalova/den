@@ -15,6 +15,7 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | `internal/autoinstall` | The Subiquity seed: user-data, GRUB patch, ISO remaster  |
 | `internal/bootstrap`   | The two passes that configure a freshly installed den    |
 | `internal/fetch`       | Downloading a file over HTTP and checking its sum        |
+| `internal/gcp`         | Reading Secret Manager with a service account key        |
 | `internal/memtest`     | Fetching the memtest86+ boot image                       |
 | `internal/remote`      | Running a script on den over ssh                         |
 | `internal/usbdisk`     | Finding a removable disk and writing an image to it      |
@@ -26,6 +27,12 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 - **Secrets never enter the repository.** The USB builder takes the password
   hash and the SSH public key at build time.
   `internal/autoinstall/user-data.tmpl` holds placeholders only.
+- **den holds one credential and fetches the rest.** A service account key,
+  sealed to the host TPM by `den secrets seal`, is the only secret ever
+  delivered to den. Everything else comes from the `den-host` secret, which
+  `den-secrets.service` explodes into `/run/den/secrets`. A unit names what it
+  needs with `LoadCredential=`, so the unit file is the allowlist. Do not add
+  a path that reads a secret some other way.
 - **No self-hosted service is a bootstrap dependency of the host that runs
   it.** Config comes from GitHub. The secrets root is Bitwarden.
 - **Nothing is trusted until tested.** Drives burn in before they hold data.
