@@ -35,6 +35,10 @@ on:
         description: mgmt release tag to build
         required: true
         type: string
+      tag:
+        description: den release tag to attach the binary to
+        required: true
+        type: string
       publish:
         description: attach the binary to den's newest release
         type: boolean
@@ -143,14 +147,19 @@ jobs:
       # its own. den's release tooling reads the newest tag in the repo and
       # parses it as semver, so any extra tag series breaks versioning.
       # Assets are named so they cannot collide with den's own.
-      - name: attach to latest den release
+      #
+      # The tag is passed in rather than resolved here. Asking for the newest
+      # release at this point attaches to whichever release is newest when the
+      # build finishes, which on closely spaced pushes is a later one, leaving
+      # this run's release with no binary at all.
+      - name: attach to den release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
-          echo "attaching mgmt $MGMT_VERSION to den $tag"
-          gh release upload "$tag" \
+          echo "attaching mgmt $MGMT_VERSION to den $TAG"
+          gh release upload "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
             mgmt-linux-amd64-* mgmt-SHA256SUMS

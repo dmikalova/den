@@ -180,8 +180,9 @@ apt-get install -y --no-install-recommends libaugeas0 libvirt0
 // tag against 26.04. Recheck upstream on every bump and go back to theirs when
 // it runs here.
 //
-// The asset hangs off den's newest release, so cutting a den release without
-// rerunning mgmt.yaml leaves this 404ing.
+// The asset hangs off a den release, but not necessarily the newest one: the
+// build takes minutes, so a release is newest for a while before its binary
+// lands. Walk back until a release that has it, rather than 404ing on timing.
 const installMgmt = `set -euo pipefail
 want=%s
 if [ "$(mgmt --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)" = "$want" ]; then
@@ -191,9 +192,20 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bin=mgmt-linux-amd64-${want}
-base=https://github.com/dmikalova/den/releases/latest/download
-curl -fsSL -o "$tmp/$bin" "$base/$bin"
-curl -fsSL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"
+found=
+for tag in $(curl -fsSL https://api.github.com/repos/dmikalova/den/releases?per_page=20 |
+  grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/'); do
+  base=https://github.com/dmikalova/den/releases/download/$tag
+  if curl -fsSL -o "$tmp/$bin" "$base/$bin" && curl -fsSL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"; then
+    found=$tag
+    break
+  fi
+done
+if [ -z "$found" ]; then
+  echo "no den release carries $bin" >&2
+  exit 1
+fi
+echo "mgmt $want from den $found"
 ( cd "$tmp" && grep "  $bin\$" sums | sha256sum -c - )
 install -m 0755 "$tmp/$bin" /usr/local/bin/mgmt
 mgmt --version

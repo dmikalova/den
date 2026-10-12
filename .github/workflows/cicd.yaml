@@ -48,3 +48,4 @@ jobs:
       contents: write
     with:
       version: ${{ needs.mgmt-version.outputs.version }}
+      tag: v${{ needs.cicd.outputs.version }}
