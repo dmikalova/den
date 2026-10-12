@@ -20,18 +20,35 @@ on:
         description: mgmt release tag to build
         required: true
         default: "1.1.0"
+      publish:
+        description: attach the binary to den's newest release
+        type: boolean
+        default: true
+  # The binary hangs off den's newest release, so a release without this job
+  # leaves bootstrap downloading a 404. A `release: published` trigger looks
+  # like the answer and silently is not: the release is cut with the default
+  # GITHUB_TOKEN, and GitHub refuses to start a workflow from an event that
+  # token raised. So CI/CD calls this directly once it has tagged.
+  workflow_call:
+    inputs:
+      version:
+        description: mgmt release tag to build
+        required: true
+        type: string
+      publish:
+        description: attach the binary to den's newest release
+        type: boolean
+        default: true
   push:
     paths:
       - ".github/workflows/mgmt.yaml"
-  # The binary hangs off den's newest release, so a release without this job
-  # leaves bootstrap downloading a 404. Rebuilding is the cost of that choice.
-  release:
-    types: [published]
 
 permissions:
   contents: read
 
 env:
+  # The fallback only covers the push trigger, which builds to prove the
+  # recipe still compiles and publishes nothing.
   MGMT_VERSION: ${{ inputs.version || '1.1.0' }}
   # mgmt's go.mod asks for 1.25.7 and pins x/tools v0.41.0. That combination is
   # held together by funcgen, which runs x/tools and cannot read export data
@@ -111,10 +128,9 @@ jobs:
   release:
     name: publish
     needs: build
-    # A push to main cuts a den release in a parallel workflow, so on push there
-    # is no release to attach to yet. Build anyway to prove it still compiles,
-    # and leave publishing to the release event that follows.
-    if: github.event_name != 'push'
+    # The push trigger supplies no inputs, so editing this file builds to prove
+    # the recipe still compiles and attaches nothing.
+    if: inputs.publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
