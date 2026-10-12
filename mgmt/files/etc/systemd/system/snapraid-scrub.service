@@ -1,0 +1,15 @@
+[Unit]
+Description=snapraid parity scrub
+Documentation=man:snapraid(1)
+RequiresMountsFor=/mnt/disk1 /mnt/disk2 /mnt/disk3 /mnt/parity1
+# snapraid takes a lock, so a scrub that starts during a sync just fails.
+After=snapraid-sync.service
+
+[Service]
+Type=oneshot
+# 8 percent of the blocks, and only those not verified in the last 10 days, so
+# the whole array is read about every three months without ever spending a
+# night reading all of it.
+ExecStart=/usr/bin/snapraid scrub -p 8 -o 10
+Nice=10
+IOSchedulingClass=idle

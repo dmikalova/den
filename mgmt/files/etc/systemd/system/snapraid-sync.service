@@ -1,0 +1,10 @@
+[Unit]
+Description=snapraid parity sync
+Documentation=man:snapraid(1)
+RequiresMountsFor=/mnt/disk1 /mnt/disk2 /mnt/disk3 /mnt/parity1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/snapraid sync
+Nice=10
+IOSchedulingClass=idle

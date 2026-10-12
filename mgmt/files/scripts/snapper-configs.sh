@@ -3,7 +3,7 @@ set -euo pipefail
 # create-config is what registers the config in SNAPPER_CONFIGS and creates the
 # .snapshots subvolume, so it has to run before any set-config. It errors if the
 # config already exists, hence the guard.
-for pair in root:/ home:/home appdata:/srv/appdata; do
+for pair in root:/ home:/home appdata:/srv/appdata disk1:/mnt/disk1 disk2:/mnt/disk2 disk3:/mnt/disk3; do
 	cfg=${pair%%:*}
 	path=${pair#*:}
 	[ -e "/etc/snapper/configs/$cfg" ] || snapper -c "$cfg" create-config "$path"
@@ -50,4 +50,25 @@ for cfg in home appdata; do
 		SYNC_ACL=yes
 done
 
-touch /var/lib/den/snapper-configs-v1
+# The data drives, snapshotted per drive because each is its own filesystem.
+# This is the undo for an accidental delete, and it is the only one: snapraid
+# propagates a deletion to parity on the next sync, so without these the window
+# to get a file back is however long until that runs.
+#
+# Hourly would be noise on drives that change a few times a week, and the
+# monthlies are kept because the mistake nobody notices is the slow one.
+for cfg in disk1 disk2 disk3; do
+	snapper -c "$cfg" set-config \
+		TIMELINE_CREATE=yes \
+		TIMELINE_CLEANUP=yes \
+		TIMELINE_LIMIT_HOURLY=0 \
+		TIMELINE_LIMIT_DAILY=7 \
+		TIMELINE_LIMIT_WEEKLY=4 \
+		TIMELINE_LIMIT_MONTHLY=3 \
+		TIMELINE_LIMIT_YEARLY=0 \
+		NUMBER_CLEANUP=no \
+		ALLOW_USERS=dmikalova \
+		SYNC_ACL=yes
+done
+
+touch /var/lib/den/snapper-configs-v2

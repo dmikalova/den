@@ -206,6 +206,8 @@ file "/etc/systemd/system/mnt-disk1.mount" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/systemd/system/mnt-disk1.mount"),
 	mode => "0644",
+
+	Depend => Exec["btrfs-mounts-v1"],
 }
 
 file "/etc/systemd/system/mnt-disk2.mount" {
@@ -242,10 +244,10 @@ file "/etc/systemd/system/mnt-storage.mount" {
 	Depend => File["/etc/systemd/system/mnt-parity1.mount"],
 }
 
-exec "storage-mounts-v1" {
+exec "storage-mounts-v2" {
 	cmd => deploy.readfile("/files/scripts/storage-mounts.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/storage-mounts-v1",
+	creates => "/var/lib/den/storage-mounts-v2",
 
 	Depend => File["/etc/systemd/system/mnt-storage.mount"],
 }
@@ -262,12 +264,65 @@ exec "storage-mounts-v1" {
 # Nothing enables the snapper timers, because the package already does, and
 # create-config appends to SNAPPER_CONFIGS itself. Bump the sentinel to reapply
 # the tuning after editing the script.
-exec "snapper-configs-v1" {
+exec "snapper-configs-v2" {
 	cmd => deploy.readfile("/files/scripts/snapper-configs.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/snapper-configs-v1",
+	creates => "/var/lib/den/snapper-configs-v2",
 
-	Depend => Exec["btrfs-mounts-v1"],
+	Depend => Exec["storage-mounts-v2"],
+}
+
+# Parity for the pooled drives. snapraid is not a backup and does not pretend
+# to be: it follows a deletion to parity on the next sync. What it buys is that
+# losing one drive costs nothing, which for 36 TB of bulk data is the difference
+# between an inconvenience and a restore from B2 measured in days.
+file "/etc/snapraid.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapraid.conf"),
+	mode => "0644",
+
+	Depend => Exec["snapper-configs-v2"],
+}
+
+file "/etc/systemd/system/snapraid-sync.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/snapraid-sync.service"),
+	mode => "0644",
+
+	Depend => File["/etc/snapraid.conf"],
+}
+
+file "/etc/systemd/system/snapraid-sync.timer" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/snapraid-sync.timer"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/snapraid-sync.service"],
+}
+
+file "/etc/systemd/system/snapraid-scrub.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/snapraid-scrub.service"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/snapraid-sync.timer"],
+}
+
+# Chained like the mount units above, for the same reason.
+file "/etc/systemd/system/snapraid-scrub.timer" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/snapraid-scrub.timer"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/snapraid-scrub.service"],
+}
+
+exec "snapraid-units-v1" {
+	cmd => deploy.readfile("/files/scripts/snapraid-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/snapraid-units-v1",
+
+	Depend => File["/etc/systemd/system/snapraid-scrub.timer"],
 }
 
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits

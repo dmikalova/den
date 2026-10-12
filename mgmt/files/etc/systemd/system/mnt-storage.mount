@@ -5,7 +5,10 @@ After=mnt-disk1.mount mnt-disk2.mount mnt-disk3.mount
 Before=local-fs.target
 
 [Mount]
-What=/mnt/disk1:/mnt/disk2:/mnt/disk3
+# The branches are a subdirectory of each drive, not the drive root, so that
+# snapper's .snapshots subvolume sits beside the branch instead of inside it.
+# A branch at the drive root makes every snapshot directory appear in the pool.
+What=/mnt/disk1/data:/mnt/disk2/data:/mnt/disk3/data
 Where=/mnt/storage
 Type=fuse.mergerfs
 # pfrd spreads new files across the drives in proportion to their free space,

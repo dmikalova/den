@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily snapraid parity sync
+
+[Timer]
+OnCalendar=daily
+# A sync of a 12 TB drive takes hours, so it runs when nothing else wants the
+# disks rather than at the stroke of midnight with everything else.
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
