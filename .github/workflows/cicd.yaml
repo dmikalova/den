@@ -48,4 +48,5 @@ jobs:
       contents: write
     with:
       version: ${{ needs.mgmt-version.outputs.version }}
-      tag: v${{ needs.cicd.outputs.version }}
+      # Already carries the leading v.
+      tag: ${{ needs.cicd.outputs.version }}
