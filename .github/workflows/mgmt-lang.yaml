@@ -41,7 +41,8 @@ jobs:
       - uses: actions/checkout@v5
 
       # Not releases/latest: mgmt.yaml needs minutes to build, so a fresh den
-      # release is newest for a while before it carries the binary.
+      # release is newest for a while before it carries the binary. Resolved
+      # with curl rather than gh, which this container does not have.
       - name: install mgmt
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,8 +52,11 @@ jobs:
           want=$(grep -oP 'DefaultMgmtVersion = "\K[^"]+' internal/bootstrap/bootstrap.go)
           bin=mgmt-linux-amd64-${want}
           found=
-          for tag in $(gh release list --limit 20 --json tagName -q '.[].tagName'); do
-            base=https://github.com/dmikalova/den/releases/download/$tag
+          tags=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=20" |
+            grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/')
+          for tag in $tags; do
+            base=https://github.com/${GITHUB_REPOSITORY}/releases/download/$tag
             if curl -fsSL -o "$bin" "$base/$bin" && curl -fsSL -o mgmt-SHA256SUMS "$base/mgmt-SHA256SUMS"; then
               found=$tag
               break
