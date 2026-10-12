@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/dmikalova/den/internal/bootstrap"
@@ -27,6 +28,14 @@ const (
 	tailscaleAuthkeyName = "AUTHKEY"
 )
 
+// den-install holds what builds the machine. It carries no IAM binding at
+// all, so only project admins read it, which is what keeps den out of it.
+const (
+	defaultInstallSecret = "den-install"
+	gcpKeyName           = "GCP_KEY"
+	sealedKeyPath        = "/etc/den/credentials/gcp-key.cred"
+)
+
 // hostFlags are the flags den bootstrap and den apply share.
 type hostFlags struct {
 	host    *string
@@ -35,6 +44,7 @@ type hostFlags struct {
 	dir     *string
 	mgmt    *string
 	project *string
+	install *string
 	tsKey   *string
 	tsTag   *string
 	dryRun  *bool
@@ -62,6 +72,11 @@ func addHostFlags(fs *flag.FlagSet) hostFlags {
 			"gcp-project",
 			defaultProject,
 			"GCP project holding the tailnet key",
+		),
+		install: fs.String(
+			"install-secret",
+			defaultInstallSecret,
+			"Secret Manager secret holding den's service account key",
 		),
 		tsKey: fs.String(
 			"tailscale-secret",
@@ -157,6 +172,46 @@ func localTerminfo() string {
 	return string(out)
 }
 
+// sealKey gives den the one credential it ever holds. The key is minted and
+// stored by the infrastructure repo, and den-install carries no binding, so a
+// laptop with project admin is the only thing that can read it.
+//
+// The key travels inside the script on ssh stdin: never an argument, never
+// staged to a file, never written to local disk. Re-sealing on every apply is
+// how a rotation reaches den, and is a no-op otherwise.
+//
+// A failure here is reported rather than fatal. den-secrets will say so
+// loudly on its own, and a half-converged host is worse than an unsealed one.
+func (f hostFlags) sealKey(ctx context.Context, h remote.Host, stdout, stderr io.Writer) {
+	if h.DryRun {
+		return
+	}
+	if _, err := fmt.Fprintf(stdout, "sealing %s from %s\n", gcpKeyName, *f.install); err != nil {
+		return
+	}
+	read, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	key, err := secrets.AccessKey(read, *f.project, *f.install, gcpKeyName)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "skipping the key seal: %v\n", err)
+		return
+	}
+
+	// A quoted delimiter stops the shell touching the body, and the key is
+	// JSON, so it cannot contain a bare line matching the delimiter.
+	script := fmt.Sprintf(`set -euo pipefail
+sudo install -d -m 0700 %s
+sudo /usr/local/bin/den secrets seal --name=%s --out=%s <<'DEN_GCP_KEY_EOF'
+%s
+DEN_GCP_KEY_EOF
+sudo systemctl restart den-secrets.service
+`, filepath.Dir(sealedKeyPath), defaultKeyName, sealedKeyPath, key)
+
+	if err := h.Run(ctx, script); err != nil {
+		_, _ = fmt.Fprintf(stderr, "sealing the key failed: %v\n", err)
+	}
+}
+
 func bootstrapHost(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("den bootstrap", flag.ContinueOnError)
 	f := addHostFlags(fs)
@@ -198,6 +253,8 @@ func applyHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	if err := bootstrap.Run(ctx, h, bootstrap.Apply(o), stdout); err != nil {
 		return err
 	}
+	// After the converge, because this needs the den binary mgmt installs.
+	f.sealKey(ctx, h, stdout, stderr)
 	_, err := fmt.Fprintln(stdout, "\napplied")
 	return err
 }
