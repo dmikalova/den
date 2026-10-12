@@ -6,7 +6,7 @@
 # Bump `version` here and the matching sentinel in main.mcl together.
 set -euo pipefail
 
-version=1.7.0
+version=1.9.0
 base="https://github.com/dmikalova/den/releases/download/v${version}"
 
 case "$(uname -m)" in
@@ -32,9 +32,9 @@ curl -fsSL "$base/den_${version}_checksums.txt" -o "$work/checksums.txt"
 tar -xzf "$work/${tarball}" -C "$work" den
 install -o root -g root -m 0755 "$work/den" /usr/local/bin/den
 
-# Holds the Discord webhook and the healthcheck URL. Both are bearer
-# credentials, so the directory is root-only and the files are placed by hand,
-# never by this repository.
+# Holds the sealed service account key and the secrets `den secrets fetch`
+# derives from it. All of them are bearer credentials, so the directory is
+# root-only and nothing in this repository ever writes its contents.
 install -d -o root -g root -m 0700 /etc/den
 
 touch "/var/lib/den/den-binary-v${version}"

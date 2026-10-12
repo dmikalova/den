@@ -358,10 +358,10 @@ exec "den-reconcile-units-v2" {
 #
 # den itself does the reporting, so the binary has to be on the host. Bump the
 # version here and in den-install.sh together.
-exec "den-binary-v1.7.0" {
+exec "den-binary-v1.9.0" {
 	cmd => deploy.readfile("/files/scripts/den-install.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-binary-v1.7.0",
+	creates => "/var/lib/den/den-binary-v1.9.0",
 
 	Depend => File["/var/lib/den/"],
 }
@@ -371,7 +371,7 @@ file "/etc/systemd/system/den-notify@.service" {
 	content => deploy.readfile("/files/etc/systemd/system/den-notify@.service"),
 	mode => "0644",
 
-	Depend => Exec["den-binary-v1.7.0"],
+	Depend => Exec["den-binary-v1.9.0"],
 }
 
 # No mode: see /var/lib/den/ above.
@@ -441,8 +441,8 @@ file "/etc/systemd/system/den-secrets.service" {
 }
 
 # Enabled but not started here. The unit needs the sealed key to exist, which
-# `den bootstrap` writes, and starting it before then would fail the converge
-# on a host that is otherwise fine. Bump the version to pick up a unit change.
+# `den apply` writes after this converge, and starting it before then would
+# fail on a host that is otherwise fine. Bump the version for a unit change.
 exec "den-secrets-units-v1" {
 	cmd => "systemctl daemon-reload && systemctl enable den-secrets.service && touch /var/lib/den/den-secrets-units-v1",
 	shell => "/bin/bash",
