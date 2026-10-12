@@ -19,10 +19,12 @@ import (
 const defaultHost = "den"
 
 // The tailnet enrolment key lives in GCP Secret Manager, written there by the
-// infrastructure repo's tailscale stack.
+// infrastructure repo's tailscale stack. The secret is a JSON object, so the
+// key inside it has to be named too.
 const (
-	defaultProject      = "mklv-infrastructure"
-	defaultTailscaleKey = "tailscale-den-authkey"
+	defaultProject       = "mklv-infrastructure"
+	defaultTailscaleKey  = "tailscale-den"
+	tailscaleAuthkeyName = "AUTHKEY"
 )
 
 // hostFlags are the flags den bootstrap and den apply share.
@@ -110,7 +112,7 @@ func (f hostFlags) tailnetKey(ctx context.Context, dryRun bool, stdout, stderr i
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	start := time.Now()
-	key, err := secrets.Access(ctx, *f.project, *f.tsKey)
+	key, err := secrets.AccessKey(ctx, *f.project, *f.tsKey, tailscaleAuthkeyName)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("gcloud did not answer within 30s: %w", err)

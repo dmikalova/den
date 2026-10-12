@@ -42,6 +42,26 @@ func Access(ctx context.Context, project, name string) (string, error) {
 	return string(bytes.TrimSpace(out)), nil
 }
 
+// AccessKey returns one key out of a JSON secret. Secret Manager secrets hold
+// a JSON object rather than a bare value, so that one grant covers everything
+// a given reader needs; the key names match the SOPS file they came from.
+func AccessKey(ctx context.Context, project, name, key string) (string, error) {
+	raw, err := Access(ctx, project, name)
+	if err != nil {
+		return "", err
+	}
+
+	var data map[string]string
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		return "", fmt.Errorf("secret %s is not a JSON object: %w", name, err)
+	}
+	value, ok := data[key]
+	if !ok {
+		return "", fmt.Errorf("secret %s has no %s", name, key)
+	}
+	return value, nil
+}
+
 // Load decrypts path and returns the install secrets it holds.
 func Load(ctx context.Context, path string) (Install, error) {
 	if _, err := exec.LookPath("sops"); err != nil {
