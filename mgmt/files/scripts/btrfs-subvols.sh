@@ -6,7 +6,7 @@ top=$(mktemp -d)
 mount -o subvolid=5 /dev/mapper/den-root "$top"
 trap 'umount "$top" 2>/dev/null || true; rmdir "$top" 2>/dev/null || true' EXIT
 
-for sv in @home @appdata @dumps @models @containers; do
+for sv in @home @appdata @models @containers; do
 	[ -e "$top/$sv" ] || btrfs subvolume create "$top/$sv"
 done
 

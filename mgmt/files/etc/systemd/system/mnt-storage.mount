@@ -1,0 +1,18 @@
+[Unit]
+Description=Pooled storage across the snapraid data drives
+Requires=mnt-disk1.mount mnt-disk2.mount mnt-disk3.mount
+After=mnt-disk1.mount mnt-disk2.mount mnt-disk3.mount
+Before=local-fs.target
+
+[Mount]
+What=/mnt/disk1:/mnt/disk2:/mnt/disk3
+Where=/mnt/storage
+Type=fuse.mergerfs
+# pfrd spreads new files across the drives in proportion to their free space,
+# which keeps any one drive from becoming the only copy of a whole directory.
+# minfreespace leaves each drive room for snapraid to work and for a file to be
+# moved off a full drive.
+Options=category.create=pfrd,minfreespace=100G,moveonenospc=true,dropcacheonclose=true,cache.files=partial,allow_other,fsname=storage
+
+[Install]
+WantedBy=local-fs.target

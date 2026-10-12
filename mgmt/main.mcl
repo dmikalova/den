@@ -178,12 +178,6 @@ file "/etc/systemd/system/srv-appdata.mount" {
 	mode => "0644",
 }
 
-file "/etc/systemd/system/srv-dumps.mount" {
-	state => "exists",
-	content => deploy.readfile("/files/etc/systemd/system/srv-dumps.mount"),
-	mode => "0644",
-}
-
 file "/etc/systemd/system/srv-models.mount" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/systemd/system/srv-models.mount"),
@@ -199,6 +193,61 @@ exec "btrfs-mounts-v1" {
 	creates => "/var/lib/den/btrfs-mounts-v1",
 
 	Depend => Exec["btrfs-subvols-v1"],
+}
+
+# The bulk storage: three btrfs data drives pooled with mergerfs, one ext4
+# parity drive for snapraid. The filesystems themselves are made by hand, once,
+# because a mkfs behind a sentinel file is one lost file away from erasing the
+# array.
+#
+# Drives are named by /dev/disk/by-id so that a controller reorder cannot swap
+# a data drive for the parity drive.
+file "/etc/systemd/system/mnt-disk1.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/mnt-disk1.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/mnt-disk2.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/mnt-disk2.mount"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/mnt-disk1.mount"],
+}
+
+file "/etc/systemd/system/mnt-disk3.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/mnt-disk3.mount"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/mnt-disk2.mount"],
+}
+
+file "/etc/systemd/system/mnt-parity1.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/mnt-parity1.mount"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/mnt-disk3.mount"],
+}
+
+# Chained to the one before it: the script below enables all five, and Depend
+# carries a single reference, so a chain is what makes "all of them exist" true.
+file "/etc/systemd/system/mnt-storage.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/mnt-storage.mount"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/mnt-parity1.mount"],
+}
+
+exec "storage-mounts-v1" {
+	cmd => deploy.readfile("/files/scripts/storage-mounts.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/storage-mounts-v1",
+
+	Depend => File["/etc/systemd/system/mnt-storage.mount"],
 }
 
 # Snapshots of /, /home and /srv/appdata. Must run after the mounts: each config

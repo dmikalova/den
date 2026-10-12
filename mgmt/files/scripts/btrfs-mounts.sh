@@ -4,7 +4,7 @@ systemctl daemon-reload
 
 # /home first: the container store mounts inside it.
 systemctl enable --now home.mount
-systemctl enable --now srv-appdata.mount srv-dumps.mount srv-models.mount
+systemctl enable --now srv-appdata.mount srv-models.mount
 
 # systemd creates a missing mountpoint as root. Pre-create the parents with the
 # right owner so only the leaf is systemd's, then fix the leaf.

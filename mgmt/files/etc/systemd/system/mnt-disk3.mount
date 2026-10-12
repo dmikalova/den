@@ -1,0 +1,12 @@
+[Unit]
+Description=snapraid data drive 3
+Before=local-fs.target
+
+[Mount]
+What=/dev/disk/by-id/ata-WDC_WD120EFBX-68B0EN0_D7JEWW4N
+Where=/mnt/disk3
+Type=btrfs
+Options=defaults,noatime
+
+[Install]
+WantedBy=local-fs.target
