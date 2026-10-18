@@ -1,13 +1,12 @@
 # den's front door.
 #
-# Everything with a web interface on this host sits behind Caddy on localhost,
-# so adding an app is a reverse_proxy line here rather than another port
-# argued about in a quadlet.
+# Everything with a web interface on this host sits behind Caddy, so adding an
+# app is a matcher here rather than another port argued about in a quadlet.
 #
-# Plain HTTP, deliberately. The only path to this port is the tailnet, which
-# is already encrypted, and terminating TLS would mean either a public name or
-# a private CA every client has to be told about. When den.mklv.tech exists
-# this gets a second site block with real certificates; the tailnet one stays.
+# Certificates are real, issued by ACME over DNS-01. Nothing reaches this host
+# from the public internet, so HTTP-01 cannot be answered; den writes the
+# challenge into its own Cloud DNS zone instead. See
+# infrastructure/docs/adr/0010.
 
 {
 	# Admin API on loopback, which is the default. It is left on because
@@ -16,7 +15,16 @@
 	admin localhost:2019
 }
 
-:80 {
+# Both names, because a wildcard certificate does not cover the name it is a
+# wildcard of.
+den.mklv.tech, *.den.mklv.tech {
+	tls {
+		dns googleclouddns {
+			gcp_project {$GCP_PROJECT}
+		}
+	}
+
+	# The names resolve publicly; the addresses behind them are tailnet-only.
 	# ufw denies inbound from the LAN, so this should be unreachable from
 	# anywhere but the tailnet already. This is the second answer: if the
 	# firewall is ever reset by hand, the proxy still refuses.
@@ -32,18 +40,25 @@
 		}
 	}
 
-	# Apps go here, one block each, each proxying to a localhost port.
-
-	# Beszel, the monitoring hub. Unlike the rest of these it has a login of
-	# its own, so the tailnet check above is a second lock rather than the
-	# only one. It still binds 127.0.0.1: the login is not a reason to put a
-	# PocketBase admin panel on the internet.
-	handle_path /beszel/* {
+	# Apps go here, one matcher each, each proxying to a localhost port. A
+	# name rather than a path: an app that assumes it owns / is the common
+	# case, and rewriting its links is work that never ends.
+	@beszel host beszel.den.mklv.tech
+	handle @beszel {
 		reverse_proxy 127.0.0.1:8090
 	}
-	redir /beszel /beszel/
 
+	# den.mklv.tech itself, and anything under it without an app.
 	handle {
-		respond "den" 200
+		root * /srv/www/den
+		file_server
 	}
+}
+
+# The tailnet IP and the MagicDNS name still have to lead somewhere, and this
+# is the way back in if a renewal fails. A redirect rather than a second copy
+# of the site: two block bodies serving the same apps is how a stale one
+# happens.
+:80 {
+	redir https://den.mklv.tech{uri} permanent
 }

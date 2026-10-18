@@ -717,12 +717,22 @@ exec "samba-units-v1" {
 # Caddy is here before the first quadlet on purpose: with it in place, adding
 # an app is a reverse_proxy line in one file, and without it every app invents
 # its own port and its own answer to who can reach it.
-exec "caddy-v1" {
+exec "caddy-v2" {
 	cmd => deploy.readfile("/files/scripts/caddy-install.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/caddy-v1",
+	creates => "/var/lib/den/caddy-v2",
 
 	Depend => Exec["samba-units-v1"],
+}
+
+# den's own, because the apt package's unit went with the apt package. This is
+# also where the sealed GCP key reaches Caddy for the ACME DNS challenge.
+file "/etc/systemd/system/caddy.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/caddy.service"),
+	mode => "0644",
+
+	Depend => Exec["caddy-v2"],
 }
 
 file "/etc/caddy/Caddyfile" {
@@ -730,7 +740,29 @@ file "/etc/caddy/Caddyfile" {
 	content => deploy.readfile("/files/etc/caddy/Caddyfile"),
 	mode => "0644",
 
-	Depend => Exec["caddy-v1"],
+	Depend => File["/etc/systemd/system/caddy.service"],
+}
+
+file "/srv/www/" {
+	state => "exists",
+
+	Depend => File["/etc/caddy/Caddyfile"],
+}
+
+file "/srv/www/den/" {
+	state => "exists",
+
+	Depend => File["/srv/www/"],
+}
+
+# What den.mklv.tech serves. A list of links, not an app: the dashboard that
+# replaces it can come when there is more than one thing to list.
+file "/srv/www/den/index.html" {
+	state => "exists",
+	content => deploy.readfile("/files/srv/www/den/index.html"),
+	mode => "0644",
+
+	Depend => File["/srv/www/den/"],
 }
 
 file "/etc/systemd/system/den-caddy-reload.service" {
@@ -738,7 +770,7 @@ file "/etc/systemd/system/den-caddy-reload.service" {
 	content => deploy.readfile("/files/etc/systemd/system/den-caddy-reload.service"),
 	mode => "0644",
 
-	Depend => File["/etc/caddy/Caddyfile"],
+	Depend => File["/srv/www/den/index.html"],
 }
 
 file "/etc/systemd/system/den-caddy-reload.path" {
@@ -749,10 +781,10 @@ file "/etc/systemd/system/den-caddy-reload.path" {
 	Depend => File["/etc/systemd/system/den-caddy-reload.service"],
 }
 
-exec "caddy-units-v1" {
+exec "caddy-units-v2" {
 	cmd => deploy.readfile("/files/scripts/caddy-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/caddy-units-v1",
+	creates => "/var/lib/den/caddy-units-v2",
 
 	Depend => File["/etc/systemd/system/den-caddy-reload.path"],
 }
@@ -774,7 +806,7 @@ exec "beszel-agent-v1" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/beszel-agent-v1",
 
-	Depend => Exec["caddy-units-v1"],
+	Depend => Exec["caddy-units-v2"],
 }
 
 exec "beszel-hub-v1" {

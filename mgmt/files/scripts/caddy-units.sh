@@ -1,15 +1,15 @@
 #!/bin/bash
-# Caddy ships its own unit; this enables it and the path unit that reloads it.
+# Enable Caddy and the path unit that reloads it.
 #
 # The config is validated before caddy is started, so a bad Caddyfile fails
 # here rather than leaving the host with nothing in front of it.
 set -euo pipefail
 
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+/usr/local/bin/caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 systemctl daemon-reload
 systemctl enable --now caddy.service
 systemctl enable --now den-caddy-reload.path
 systemctl reload caddy.service
 
-touch /var/lib/den/caddy-units-v1
+touch /var/lib/den/caddy-units-v2

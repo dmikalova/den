@@ -1,22 +1,41 @@
-#!/bin/bash
-# Caddy is not in Ubuntu's archive, so it comes from the project's own apt
-# repository rather than a pkg resource.
+#!/usr/bin/env bash
+# Install Caddy with the Cloud DNS plugin.
 #
-# Tracking stable rather than pinning a version: this is the thing in front of
-# everything else, which makes it the thing that most needs security updates
-# without a human in the loop.
+# Not the apt repository any more. ACME DNS-01 needs caddy-dns/googleclouddns
+# compiled in, and Caddy has no runtime plugin loading, so a stock binary
+# cannot do it at all. caddyserver.com builds on request, which is what
+# `caddy add-package` does under the hood.
+#
+# Only the plugin is pinned; the Caddy version is whatever that API calls
+# current. The sentinel is what stops it drifting: a rebuild happens when the
+# version below is bumped, not when upstream releases.
 set -euo pipefail
 
-apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+plugin="github.com/caddy-dns/googleclouddns@v1.1.0"
 
-curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' |
-  gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+# The apt package ships its own caddy.service and its own binary path. Leaving
+# it installed means unattended-upgrades quietly replacing a Caddy that can do
+# DNS-01 with one that cannot.
+if dpkg -s caddy >/dev/null 2>&1; then
+  systemctl disable --now caddy.service || true
+  DEBIAN_FRONTEND=noninteractive apt-get purge -y caddy
+fi
+rm -f /etc/apt/sources.list.d/caddy-stable.list \
+  /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 
-# The published list file already names the keyring above.
-curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-  -o /etc/apt/sources.list.d/caddy-stable.list
+tmp="$(mktemp -d)"
+trap 'rm -rf "${tmp}"' EXIT
 
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+curl -fsSL --retry 3 --max-time 600 \
+  "https://caddyserver.com/api/download?os=linux&arch=amd64&p=${plugin}" \
+  -o "${tmp}/caddy"
+install -m 0755 "${tmp}/caddy" /usr/local/bin/caddy
 
-touch /var/lib/den/caddy-v1
+# The package used to supply this. Owning the unit means owning the user too.
+if ! id caddy >/dev/null 2>&1; then
+  useradd --system --home /var/lib/caddy --shell /usr/sbin/nologin caddy
+fi
+
+install -d -m 0755 /etc/caddy
+install -d -m 0755 /var/lib/den
+touch /var/lib/den/caddy-v2

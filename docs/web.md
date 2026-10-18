@@ -10,11 +10,19 @@ it.
 
 ## Reach
 
-The listener is on port 80, plain HTTP. The only route to it is the tailnet,
-which is encrypted already, and terminating TLS would mean either a public
-name or a private CA that every client has to be told about. When
-`den.mklv.tech` exists this gets a second site block with real certificates;
-the tailnet one stays.
+Caddy serves `den.mklv.tech` and `*.den.mklv.tech` over HTTPS with real
+certificates. The names resolve publicly; the addresses they resolve to are
+tailnet addresses, so a stranger can look den up and still not reach it.
+
+The certificate is issued by ACME over DNS-01. HTTP-01 is not an option,
+because answering it means being reachable from the public internet, which is
+the thing this host is not. den writes the challenge record into its own
+delegated Cloud DNS zone with the same GCP account it already holds. See
+[ADR 0010](https://github.com/dmikalova/infrastructure/blob/main/docs/adr/0010-den-serves-its-own-names-from-a-delegated-zone.md).
+
+Port 80 still listens, and redirects to `https://den.mklv.tech`. It is kept so
+the tailnet IP and the MagicDNS name lead somewhere, and so there is a way
+back in if a renewal fails.
 
 Two things keep it to the tailnet:
 
@@ -25,22 +33,49 @@ The second exists because the first is one `ufw reset` away from being wrong.
 
 ## Adding an app
 
-Add a block to [mgmt/files/etc/caddy/Caddyfile](../mgmt/files/etc/caddy/Caddyfile):
+Give it a name, not a path. An app that assumes it owns `/` is the common
+case, and rewriting its links is work that never ends.
+
+Add the name to `services` in `infrastructure/den/dns/main.tf`, then add a
+matcher to [mgmt/files/etc/caddy/Caddyfile](../mgmt/files/etc/caddy/Caddyfile):
 
 ```caddyfile
-handle_path /thing/* {
+@thing host thing.den.mklv.tech
+handle @thing {
     reverse_proxy 127.0.0.1:8080
 }
 ```
 
-`den-caddy-reload.path` watches the file and reloads Caddy when it changes, so
-there is no sentinel to bump and nothing to remember. A bad config fails the
-reload unit and leaves the running config in place, so the proxy does not go
-down for a typo.
+The wildcard certificate already covers the name, so there is nothing to issue.
+
+Add it to [files/srv/www/den/index.html](../mgmt/files/srv/www/den/index.html)
+too; that page is what `den.mklv.tech` serves and it is hand-written.
+
+`den-caddy-reload.path` watches the Caddyfile and reloads Caddy when it
+changes, so there is no sentinel to bump and nothing to remember. A bad config
+fails the reload unit and leaves the running config in place, so the proxy does
+not go down for a typo.
+
+## The binary
+
+Caddy is built by `caddyserver.com` on request with
+`caddy-dns/googleclouddns` compiled in, because Caddy has no runtime plugin
+loading and a stock binary cannot do DNS-01 at all. That is why den owns
+`caddy.service` rather than taking the one the apt package shipped: the
+package would replace the binary on its next upgrade.
+
+The plugin version is pinned in
+[files/scripts/caddy-install.sh](../mgmt/files/scripts/caddy-install.sh). The
+Caddy version is whatever the build API calls current at install time; the
+sentinel is what stops it drifting.
+
+The unit takes the TPM-sealed GCP key through `LoadCredentialEncrypted`, the
+same key `den-secrets.service` uses. The account can write den's zone and
+nothing else.
 
 ## Beszel
 
-Beszel is at `http://den/beszel/`.
+Beszel is at `https://beszel.den.mklv.tech`.
 
 It replaces Netdata, which Ubuntu dropped from its archive before 26.04 with
 no replacement. The swap is also an improvement: the thing that breaks on den
@@ -62,9 +97,10 @@ The hub is a rootless quadlet in the user layer, like every other app. It
 binds `127.0.0.1:8090` and keeps a PocketBase database on `/srv/appdata/beszel`,
 so it is backed up with everything else there.
 
-Unlike Netdata, the hub has a login of its own, so the tailnet check in Caddy
-is a second lock rather than the only one. It is still loopback-only: a login
-is not a reason to put an admin panel on the internet.
+Unlike Netdata, the hub is a full admin panel over a database, so it stays
+loopback-only and behind Caddy's tailnet check. `APP_URL` tells it the name it
+is reached by, because the links it builds are absolute and it would otherwise
+guess `localhost:8090`.
 
 The agent authenticates the hub with the hub's public key. Nothing in this
 feature is a secret and nothing is copied: both halves sit on this host at

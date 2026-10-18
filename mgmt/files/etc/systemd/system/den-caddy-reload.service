@@ -7,5 +7,5 @@ Requires=caddy.service
 Type=oneshot
 # Validate first. `caddy reload` keeps the running config when the new one is
 # bad, so a typo is a failed unit here rather than a dead proxy.
-ExecStart=/usr/bin/caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+ExecStart=/usr/local/bin/caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ExecStart=/bin/systemctl reload caddy.service

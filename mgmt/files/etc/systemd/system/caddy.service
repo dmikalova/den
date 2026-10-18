@@ -1,0 +1,39 @@
+[Unit]
+# Replaces the unit the apt package used to ship, because den builds its own
+# Caddy: the Cloud DNS plugin is compile-time only.
+Description=Caddy
+Documentation=https://caddyserver.com/docs/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+Restart=on-failure
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+
+# The same TPM-sealed key den-secrets.service uses, handed to this process
+# alone. Caddy needs it to write the ACME challenge into den's own Cloud DNS
+# zone; the account can write that zone and nothing else. See
+# infrastructure/docs/adr/0010.
+LoadCredentialEncrypted=gcp-key:/etc/den/credentials/gcp-key.cred
+Environment=GOOGLE_APPLICATION_CREDENTIALS=%d/gcp-key
+Environment=GCP_PROJECT=mklv-infrastructure
+
+# Certificates live under /var/lib/caddy. Losing them costs a re-issue, not an
+# outage, but re-issuing on every restart would hit Let's Encrypt's rate limit
+# soon enough to matter.
+StateDirectory=caddy
+LogsDirectory=caddy
+Environment=XDG_DATA_HOME=%S
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
