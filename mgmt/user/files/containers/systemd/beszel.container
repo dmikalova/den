@@ -31,6 +31,15 @@ EnvironmentFile=/srv/appdata/beszel/hub.env
 # Loopback only. Caddy publishes it on the tailnet; nothing reaches this port
 # from off the host.
 PublishPort=127.0.0.1:8090:8090
+# Hardening, matching ollama.container. See the longer note there.
+#
+# The only thing the hub writes is its PocketBase database, which is the bind
+# mount above. Everything else can be read-only, with a small tmpfs for the
+# temporary files SQLite makes beside a write.
+ReadOnly=true
+Tmpfs=/tmp:rw,exec,nosuid,nodev,size=64m
+DropCapability=ALL
+NoNewPrivileges=true
 
 [Service]
 Restart=always

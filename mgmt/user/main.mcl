@@ -45,14 +45,14 @@ file "/home/dmikalova/.config/containers/systemd/beszel.container" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container"],
 }
 
-exec "quadlets-v2" {
-	# Three tries, then report. An exec that cannot succeed will never
-	# succeed, and the default is to retry it until the unit times out.
-	Meta:retry => 3,
-	Meta:delay => 15000,
-	cmd => deploy.readfile("/files/scripts/quadlets.sh"),
-	shell => "/bin/bash",
-	creates => "/home/dmikalova/.local/state/den/quadlets-v2",
+exec "quadlets-v3" {
+    # Three tries, then report. An exec that cannot succeed will never
+    # succeed, and the default is to retry it until the unit times out.
+    Meta:retry => 3,
+    Meta:delay => 15000,
+    cmd => deploy.readfile("/files/scripts/quadlets.sh"),
+    shell => "/bin/bash",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v3",
 
 	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
 }

@@ -28,6 +28,26 @@ Environment=OLLAMA_KEEP_ALIVE=30m
 # One model at a time. The card has 20 GiB, and a second model loading beside
 # the first is how you get a silent fall back to CPU.
 Environment=OLLAMA_MAX_LOADED_MODELS=1
+# Hardening. These are the defaults every quadlet here gets, set now while
+# there are two of them rather than argued about later.
+#
+# The image filesystem is read-only, so a compromised process cannot write a
+# binary and persist. Everything ollama actually writes is a bind mount:
+# /root/.ollama for the weights, and a tmpfs for the runner binaries it
+# unpacks at start. Without that tmpfs it fails on the first model load.
+ReadOnly=true
+Tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g
+# No capabilities at all. ollama listens on 11434, which needs none, and the
+# GPU arrives through CDI rather than through a privileged device open.
+DropCapability=ALL
+# Nothing in this container may gain privileges through a setuid binary. With
+# every capability already dropped this is belt and braces, and it is also
+# what stops a future image change from quietly reintroducing one.
+NoNewPrivileges=true
+# Deliberately no UserNS=keep-id. These quadlets are already rootless, so
+# root inside the container is dmikalova outside it, which is what keep-id
+# is usually reached for. Setting it would instead map dmikalova to UID 1000
+# inside, where the image's /root is not writable.
 
 [Service]
 Restart=always

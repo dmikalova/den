@@ -11,13 +11,19 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 # Quadlets are not enabled the way ordinary units are. A generator reads the
 # .container file at daemon-reload and writes the service, so the reload is
 # what installs it and [Install] in the file is what starts it at boot. There
-# is no ollama.service on disk to enable, and trying produces a unit not found.
+# is no ollama.service on disk to enable, and trying produces a unit not
+# found.
+#
+# restart, not start: start is a no-op on a unit that is already running, so a
+# change to a .container file would be written and never taken up. This script
+# only runs when its sentinel is bumped, which is exactly when the file did
+# change, so the restart is never gratuitous.
 systemctl --user daemon-reload
-systemctl --user start ollama.service
+systemctl --user restart ollama.service
 
 # /srv/appdata/beszel and the hub's key pair are made by the host layer, so
 # the hub adopts a key the agent already trusts instead of generating its own.
-systemctl --user start beszel.service
+systemctl --user restart beszel.service
 
 # Wait for the API rather than the container, because the container is up well
 # before the server is listening and the pull below would race it.
@@ -34,4 +40,4 @@ done
 podman exec ollama ollama pull qwen3:14b
 
 mkdir -p "${HOME}/.local/state/den"
-touch "${HOME}/.local/state/den/quadlets-v2"
+touch "${HOME}/.local/state/den/quadlets-v3"
