@@ -3,7 +3,24 @@
 # owning user so git does not refuse the checkout as dubiously owned, then mgmt
 # converges as root.
 set -euo pipefail
+
+# One reconcile at a time. The daily timer and the CI apply can land together,
+# and two mgmt runs cannot share etcd's port on 2380: the loser dies on bind and
+# reports a failed deploy. Queue instead of exiting, because the run already in
+# flight pulled before the commit that triggered this one.
+exec 9>/run/den-reconcile.lock
+flock -w 900 9 || {
+	echo "another reconcile held the lock for 15m, giving up" >&2
+	exit 1
+}
+
 runuser -u dmikalova -- git -C /srv/den-config pull --ff-only
+
+# den-secrets only fetches at boot and then stays active, so a key added to the
+# secret in Secret Manager is invisible until a reboot. Reconcile is the drift
+# catcher, and a stale secret is drift.
+systemctl restart den-secrets.service
+
 cd /srv/den-config/mgmt
 # --no-autoedges is not an optimisation, it is required. Auto-edge computation
 # on this graph runs for minutes, and the converger counts that time as idle, so

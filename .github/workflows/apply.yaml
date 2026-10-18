@@ -65,9 +65,22 @@ jobs:
 
       # Tailscale SSH authenticates by tailnet identity, so no key is deployed
       # and no secret is involved. The ACL decides that tag:ci may be root.
+      #
+      # Through systemd rather than the script directly: an SSH-invoked script
+      # reparents to init when the runner leaves the tailnet, escaping both the
+      # unit's TimeoutStartSec and its OnFailure alert. One such orphan wedged
+      # on etcd's port for ten hours and blocked every later reconcile.
       - name: converge
         run: |
           ssh -o BatchMode=yes \
               -o StrictHostKeyChecking=accept-new \
               -o ConnectTimeout=15 \
-              root@den den-reconcile
+              root@den 'systemctl start --wait den-reconcile.service'
+
+      - name: converge logs
+        if: always()
+        run: |
+          ssh -o BatchMode=yes \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=15 \
+              root@den 'journalctl -u den-reconcile.service -n 200 --no-pager' || true
