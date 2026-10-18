@@ -1,0 +1,27 @@
+[Unit]
+Description=Prove den's kopia backup can be restored
+Wants=network-online.target
+After=network-online.target den-secrets.service kopia-backup.service
+Requires=den-secrets.service
+RequiresMountsFor=/srv/appdata
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/den-kopia-drill
+
+# The drill reads the repository; it never needs the B2 key, because the
+# connection is already recorded in the state directory.
+LoadCredential=kopia-password:/run/den/secrets/KOPIA_PASSWORD
+
+StateDirectory=kopia
+StateDirectoryMode=0700
+CacheDirectory=kopia
+CacheDirectoryMode=0700
+
+Nice=10
+IOSchedulingClass=idle
+
+# Failure here is the whole point of the unit: the global OnFailure drop-in
+# turns it into an alert, which is the only way a backup that stopped working
+# gets noticed before it is needed.
+TimeoutStartSec=2h

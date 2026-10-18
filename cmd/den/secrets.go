@@ -55,6 +55,7 @@ type secretsFlags struct {
 	cache   *string
 	key     *string
 	webhook *string
+	ping    *string
 }
 
 func addSecretsFlags(fs *flag.FlagSet) secretsFlags {
@@ -71,6 +72,11 @@ func addSecretsFlags(fs *flag.FlagSet) secretsFlags {
 			"webhook-file",
 			defaultWebhookFile,
 			"durable copy of the Discord webhook for the failure notifier",
+		),
+		ping: fs.String(
+			"ping-file",
+			defaultPingFile,
+			"durable copy of the healthcheck URL for the dead-man's switch",
 		),
 	}
 }
@@ -96,7 +102,10 @@ func secretsFetch(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := explode(*f.dir, data); err != nil {
 		return err
 	}
-	if err := writeWebhook(*f.webhook, data); err != nil {
+	if err := writeDurable(*f.webhook, data["DISCORD_WEBHOOK_URL"]); err != nil {
+		return err
+	}
+	if err := writeDurable(*f.ping, data["HEALTHCHECK_URL"]); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(stdout, "wrote %d secrets to %s\n", len(data), *f.dir); err != nil {
@@ -210,19 +219,21 @@ func explode(dir string, data map[string]string) error {
 	return nil
 }
 
-// writeWebhook keeps a durable copy of the webhook for den-notify@, which is
-// the one unit that must not depend on this one: a notifier that waits on the
-// secret fetch cannot report the secret fetch failing. /etc is inside LUKS, so
+// writeDurable keeps a copy of one value outside /run, for the two units that
+// must not depend on this one: a notifier that waits on the secret fetch
+// cannot report the secret fetch failing, and a dead-man's-switch ping that
+// waits on it cannot report the host failing to boot. /etc is inside LUKS, so
 // a stolen disk still yields nothing.
-func writeWebhook(path string, data map[string]string) error {
-	webhook := data["DISCORD_WEBHOOK_URL"]
-	if webhook == "" {
+//
+// An absent key is not an error. den runs before every value exists.
+func writeDurable(path, value string) error {
+	if value == "" {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("making %s: %w", filepath.Dir(path), err)
 	}
-	if err := os.WriteFile(path, []byte(webhook+"\n"), 0o400); err != nil {
+	if err := os.WriteFile(path, []byte(value+"\n"), 0o400); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil

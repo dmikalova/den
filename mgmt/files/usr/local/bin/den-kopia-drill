@@ -1,0 +1,67 @@
+#!/bin/bash
+# The restore drill.
+#
+# A backup is a claim until someone has taken data back out of it. The claim
+# fails quietly: a wrong password, a revoked key, a bucket lifecycle rule that
+# deleted the blobs, a repository that was never written to at all. None of
+# those show up in a successful upload, and all of them show up here.
+#
+# The drill restores the newest /srv/appdata snapshot into a scratch directory
+# and compares it with the live tree, then reads a sample of the repository's
+# actual bytes back out of Backblaze. It writes nothing outside its scratch
+# directory and never touches the live data.
+#
+# Run by kopia-restore-drill.service, which is what grants the credentials:
+#   systemctl start kopia-restore-drill.service
+set -euo pipefail
+
+creds=${CREDENTIALS_DIRECTORY:?run this through kopia-restore-drill.service}
+
+export KOPIA_PASSWORD
+KOPIA_PASSWORD=$(<"$creds/kopia-password")
+export KOPIA_CONFIG_PATH=/var/lib/kopia/repository.config
+export KOPIA_CHECK_FOR_UPDATES=false
+
+source=/srv/appdata
+
+kopia repository status >/dev/null || {
+	echo "not connected to a repository; run kopia-backup.service first" >&2
+	exit 1
+}
+
+# python3 rather than jq: it is already on an Ubuntu server, and a backup drill
+# is a poor reason to add a package to the host.
+snapshot=$(kopia snapshot list "$source" --json |
+	python3 -c 'import json,sys; s=json.load(sys.stdin); print(s[-1]["id"] if s else "")')
+[ -n "$snapshot" ] || {
+	echo "no snapshot of $source to restore" >&2
+	exit 1
+}
+echo "== restoring $snapshot"
+
+work=$(mktemp -d /var/tmp/kopia-drill.XXXXXX)
+trap 'rm -rf "$work"' EXIT
+kopia snapshot restore "$snapshot" "$work/restored"
+
+# diff rather than a hash of the tree: the live directory moves on between the
+# snapshot and now, so the interesting output is which files differ, not a
+# single bit saying that some did.
+#
+# A difference is not a failure. An empty restore is.
+files=$(find "$work/restored" -type f | wc -l)
+[ "$files" -gt 0 ] || {
+	echo "restored nothing from $snapshot" >&2
+	exit 1
+}
+echo "   restored $files files"
+
+echo "== differences against the live tree (expected: files written since)"
+diff -rq "$work/restored" "$source" || true
+
+# The restore above can be served entirely from the local cache, which proves
+# the cache and nothing else. This reads blobs back from Backblaze.
+echo "== verifying a sample of the repository"
+kopia snapshot verify --verify-files-percent=2
+
+echo
+echo "data came back out of Backblaze. The backup is a backup."

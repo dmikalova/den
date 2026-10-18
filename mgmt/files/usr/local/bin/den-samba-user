@@ -1,0 +1,29 @@
+#!/bin/bash
+# Samba keeps its own password database, separate from the Unix one, and
+# nothing populates it on install. This does, from the credential systemd
+# hands it.
+#
+# Written to be run every boot rather than once: the password lives in Secret
+# Manager, so re-applying it is how a restored or rebuilt passdb comes back
+# without anyone remembering that it had to.
+#
+# Run by den-samba.service, which is what grants the credential.
+set -euo pipefail
+
+creds=${CREDENTIALS_DIRECTORY:?run this through den-samba.service}
+user=dmikalova
+password=$(<"$creds/samba-password")
+
+# -s reads the password from stdin, twice, instead of opening a terminal.
+# -a is add-or-update, so this is the same command whether or not the account
+# is already there.
+printf '%s\n%s\n' "$password" "$password" | smbpasswd -s -a "$user"
+smbpasswd -e "$user"
+
+# 0700: a Time Machine sparsebundle is a copy of a whole Mac, which makes this
+# the most sensitive directory on the array.
+install -d -o "$user" -g "$user" -m 0700 /mnt/storage/timemachine
+
+# Catches a typo in smb.conf here, where it is a failed unit and a Discord
+# message, rather than at the next restart of smbd.
+testparm --suppress-prompt --silent /etc/samba/smb.conf

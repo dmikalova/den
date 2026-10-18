@@ -1,0 +1,18 @@
+[Unit]
+Description=Populate den's Samba password database
+After=den-secrets.service
+Requires=den-secrets.service
+Before=smbd.service
+RequiresMountsFor=/mnt/storage
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/den-samba-user
+
+# One name, one file. The Unix password and every other secret on the host
+# stay out of this process.
+LoadCredential=samba-password:/run/den/secrets/SAMBA_PASSWORD
+
+[Install]
+WantedBy=multi-user.target

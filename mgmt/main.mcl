@@ -18,10 +18,12 @@ pkg [
 	"lm-sensors",
 	"mergerfs",
 	"ncurses-term",
+	"netdata",
 	"nvidia-driver-595-open",
 	"passt",
 	"podman",
 	"rsync",
+	"samba",
 	"smartmontools",
 	"snapper",
 	"snapraid",
@@ -585,3 +587,188 @@ exec "den-secrets-units-v1" {
 
 	Depend => File["/etc/systemd/system/den-secrets.service"],
 }
+
+# The offsite copy.
+#
+# snapraid is a drive dying. kopia is everything else: a file deleted by
+# mistake, a bad write synced into parity, the building. It is the only copy of
+# den's data that is not in this room, and the only one encrypted with a key
+# Backblaze does not have.
+#
+# Everything below reads its credentials from /run/den/secrets, so it chains
+# after the secrets path rather than running beside it.
+exec "kopia-v1" {
+	cmd => deploy.readfile("/files/scripts/kopia-install.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/kopia-v1",
+
+	Depend => Exec["den-secrets-units-v1"],
+}
+
+file "/usr/local/bin/den-kopia" {
+	state => "exists",
+	content => deploy.readfile("/files/usr/local/bin/den-kopia"),
+	mode => "0755",
+
+	Depend => Exec["kopia-v1"],
+}
+
+file "/etc/systemd/system/kopia-backup.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/kopia-backup.service"),
+	mode => "0644",
+
+	Depend => File["/usr/local/bin/den-kopia"],
+}
+
+file "/etc/systemd/system/kopia-backup.timer" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/kopia-backup.timer"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/kopia-backup.service"],
+}
+
+# The drill is not optional extra credit. A backup nobody has restored from is
+# a belief, and the way that belief is usually tested is the day it matters.
+file "/usr/local/bin/den-kopia-drill" {
+	state => "exists",
+	content => deploy.readfile("/files/usr/local/bin/den-kopia-drill"),
+	mode => "0755",
+
+	Depend => File["/etc/systemd/system/kopia-backup.timer"],
+}
+
+file "/etc/systemd/system/kopia-restore-drill.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/kopia-restore-drill.service"),
+	mode => "0644",
+
+	Depend => File["/usr/local/bin/den-kopia-drill"],
+}
+
+file "/etc/systemd/system/kopia-restore-drill.timer" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/kopia-restore-drill.timer"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/kopia-restore-drill.service"],
+}
+
+# Bump the version for a unit change; the sentinel is what makes this run once.
+exec "kopia-units-v1" {
+	cmd => deploy.readfile("/files/scripts/kopia-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/kopia-units-v1",
+
+	Depend => File["/etc/systemd/system/kopia-restore-drill.timer"],
+}
+
+# File shares.
+#
+# Samba is in the host layer rather than a container because it serves the
+# array, and a container that bind mounts the whole array to re-export it is a
+# container in name only.
+#
+# It listens on the tailnet alone. There is no LAN share and no guest access,
+# which is also why the Time Machine target can sit on the same host.
+file "/etc/samba/smb.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/samba/smb.conf"),
+	mode => "0644",
+
+	Depend => Exec["kopia-units-v1"],
+}
+
+file "/usr/local/bin/den-samba-user" {
+	state => "exists",
+	content => deploy.readfile("/files/usr/local/bin/den-samba-user"),
+	mode => "0755",
+
+	Depend => File["/etc/samba/smb.conf"],
+}
+
+file "/etc/systemd/system/den-samba.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-samba.service"),
+	mode => "0644",
+
+	Depend => File["/usr/local/bin/den-samba-user"],
+}
+
+# Enabled, not started: the password comes from the secrets path, which is not
+# populated until `den apply` has written the sealed key.
+exec "samba-units-v1" {
+	cmd => deploy.readfile("/files/scripts/samba-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/samba-units-v1",
+
+	Depend => File["/etc/systemd/system/den-samba.service"],
+}
+
+# The front door.
+#
+# Caddy is here before the first quadlet on purpose: with it in place, adding
+# an app is a reverse_proxy line in one file, and without it every app invents
+# its own port and its own answer to who can reach it.
+exec "caddy-v1" {
+	cmd => deploy.readfile("/files/scripts/caddy-install.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/caddy-v1",
+
+	Depend => Exec["samba-units-v1"],
+}
+
+file "/etc/caddy/Caddyfile" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/caddy/Caddyfile"),
+	mode => "0644",
+
+	Depend => Exec["caddy-v1"],
+}
+
+file "/etc/systemd/system/den-caddy-reload.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-caddy-reload.service"),
+	mode => "0644",
+
+	Depend => File["/etc/caddy/Caddyfile"],
+}
+
+file "/etc/systemd/system/den-caddy-reload.path" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-caddy-reload.path"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/den-caddy-reload.service"],
+}
+
+exec "caddy-units-v1" {
+	cmd => deploy.readfile("/files/scripts/caddy-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/caddy-units-v1",
+
+	Depend => File["/etc/systemd/system/den-caddy-reload.path"],
+}
+
+# What the host looks like from the outside.
+#
+# Netdata is in the host layer because its whole job is to see the host: a
+# container watching drive temperatures and ZRAM through a namespace is
+# fighting the isolation the container exists for.
+file "/etc/netdata/netdata.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/netdata/netdata.conf"),
+	mode => "0644",
+
+	Depend => Exec["caddy-units-v1"],
+}
+
+exec "netdata-units-v1" {
+	cmd => deploy.readfile("/files/scripts/netdata-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/netdata-units-v1",
+
+	Depend => File["/etc/netdata/netdata.conf"],
+}
+

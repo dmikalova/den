@@ -1,0 +1,110 @@
+#!/bin/bash
+# den's offsite copy.
+#
+# snapraid covers a drive that dies. It does not cover a file deleted by
+# mistake, a bad write that gets synced into parity, or the building. kopia
+# does, because the copy is in another state and the history is addressable.
+#
+# Encryption is client side, so Backblaze holds ciphertext and KOPIA_PASSWORD
+# is the whole of what makes it readable. The password is minted by the
+# infrastructure repo, never typed, and never stored on this host outside the
+# credential systemd hands this script.
+#
+# Run by kopia-backup.service, which is what grants the credentials. Running it
+# by hand needs that service's environment, so run the service instead:
+#   systemctl start kopia-backup.service
+set -euo pipefail
+
+creds=${CREDENTIALS_DIRECTORY:?run this through kopia-backup.service}
+
+export KOPIA_PASSWORD
+KOPIA_PASSWORD=$(<"$creds/kopia-password")
+bucket=$(<"$creds/b2-bucket")
+key_id=$(<"$creds/b2-key-id")
+key=$(<"$creds/b2-key")
+
+# Not /root/.config. The state directory is the unit's, so a rebuild that keeps
+# /var/lib keeps the repository connection, and nothing here depends on which
+# account happens to run it.
+export KOPIA_CONFIG_PATH=/var/lib/kopia/repository.config
+export KOPIA_CHECK_FOR_UPDATES=false
+cache=/var/cache/kopia
+
+# Paths that are worth money or time to lose. /srv/models is deliberately
+# absent: a model file is a download, and paying to store a copy of something
+# the internet will hand back is the easiest way to make a backup too expensive
+# to keep.
+sources=(
+	/srv/appdata
+	/mnt/storage
+)
+
+connect() {
+	# connect first, create second. The repository usually exists, and `create`
+	# against an existing one is an error rather than a no-op, so the order
+	# decides whether the normal path is quiet.
+	if kopia repository connect b2 \
+		--bucket="$bucket" \
+		--key-id="$key_id" \
+		--key="$key" \
+		--cache-directory="$cache" \
+		--no-check-for-updates 2>/dev/null; then
+		return 0
+	fi
+
+	echo "no repository at b2://$bucket; creating one"
+	kopia repository create b2 \
+		--bucket="$bucket" \
+		--key-id="$key_id" \
+		--key="$key" \
+		--cache-directory="$cache" \
+		--no-check-for-updates
+}
+
+# The config file records the connection, not the credentials, so this is a
+# connection check rather than a login check.
+if ! kopia repository status >/dev/null 2>&1; then
+	connect
+fi
+
+# Policy lives in the repository, so this is both "set it" and "put it back".
+# Cheap enough to assert every run, which is the point: a policy edited by hand
+# during an incident should not survive the incident.
+kopia policy set --global \
+	--compression=zstd-fastest \
+	--keep-latest=5 \
+	--keep-hourly=0 \
+	--keep-daily=14 \
+	--keep-weekly=8 \
+	--keep-monthly=12 \
+	--keep-annual=3 \
+	--add-ignore='.snapshots/' \
+	--add-ignore='lost+found/' \
+	--add-ignore='*.part' \
+	--add-ignore='*.tmp'
+
+# A Time Machine sparsebundle is already a backup, and it churns: every Mac
+# backup rewrites bands, so uploading it would cost more than everything else
+# here combined to store a second copy of a copy.
+kopia policy set /mnt/storage --add-ignore='/timemachine/'
+
+# TEMPORARY. /mnt/storage/recover holds the drives being extracted from the old
+# array; it is a second copy of data that is already somewhere else, and paying
+# to upload it twice is waste. Delete this block once the extraction is done,
+# or it will quietly exclude a real directory that happens to inherit the name.
+kopia policy set /mnt/storage --add-ignore='/recover/'
+
+for src in "${sources[@]}"; do
+	mountpoint -q "$src" || [ -d "$src" ] || {
+		echo "missing source: $src" >&2
+		exit 1
+	}
+	kopia snapshot create "$src"
+done
+
+# Quick maintenance only. Full maintenance rewrites pack blobs and can run for
+# hours, which is a poor fit for a unit that holds a credential and a timer
+# slot; kopia schedules the full pass itself once the quick pass tells it to.
+kopia maintenance run
+
+kopia repository status

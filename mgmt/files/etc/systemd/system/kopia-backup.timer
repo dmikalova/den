@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily kopia backup to Backblaze
+
+[Timer]
+# Before the midnight snapraid sync rather than after it. The day's writes go
+# offsite first, so the slow local parity pass is never what stands between a
+# new file and its only other copy.
+OnCalendar=*-*-* 22:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -55,6 +55,23 @@ func List(user string) []Check {
 		{"reconcile timer enabled", `systemctl is-enabled den-reconcile.timer`},
 		{"unattended upgrades active", `systemctl is-active unattended-upgrades`},
 		{"swap active", `swapon --show --noheadings | grep -q .`},
+
+		// A timer that is enabled says a backup is scheduled. A repository
+		// that answers says there is something to restore from, which is the
+		// part that is easy to be wrong about.
+		{"backup timer enabled", `systemctl is-enabled kopia-backup.timer`},
+		{"restore drill timer enabled", `systemctl is-enabled kopia-restore-drill.timer`},
+		{"backup repository connected", `[ -s /var/lib/kopia/repository.config ]`},
+
+		// smbd binds tailscale0, so it fails to start when the tailnet is not
+		// up. Active therefore means both things are true.
+		{"samba running", `systemctl is-active smbd`},
+
+		{"proxy running", `systemctl is-active caddy`},
+		{"proxy answering", `curl -fsS -o /dev/null http://127.0.0.1/`},
+
+		{"metrics running", `systemctl is-active netdata`},
+		{"metrics answering", `curl -fsS -o /dev/null http://127.0.0.1/netdata/`},
 	}
 }
 

@@ -1,0 +1,36 @@
+[Unit]
+Description=Back den up to Backblaze with kopia
+Wants=network-online.target
+After=network-online.target den-secrets.service
+# The credentials below are files den-secrets.service writes. Without this the
+# unit starts on a boot where they are not there yet and fails on a host that
+# is fine.
+Requires=den-secrets.service
+RequiresMountsFor=/srv/appdata /mnt/storage
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/den-kopia
+
+# Four names, four files, and nothing else from /run/den/secrets reaches this
+# process. The unit file is the allowlist.
+LoadCredential=b2-bucket:/run/den/secrets/B2_BUCKET
+LoadCredential=b2-key:/run/den/secrets/B2_KEY
+LoadCredential=b2-key-id:/run/den/secrets/B2_KEY_ID
+LoadCredential=kopia-password:/run/den/secrets/KOPIA_PASSWORD
+
+# The repository connection, which must outlive a reboot, and the cache, which
+# must not be backed up or restored.
+StateDirectory=kopia
+StateDirectoryMode=0700
+CacheDirectory=kopia
+CacheDirectoryMode=0700
+
+# Backups lose to anything a human is waiting on.
+Nice=10
+IOSchedulingClass=idle
+
+# A first upload of a full array takes a long time, and oneshot has no start
+# timeout by default. The bound exists so a hung connection costs one night
+# rather than blocking every later run.
+TimeoutStartSec=12h

@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly kopia restore drill
+
+[Timer]
+# Sunday morning, after the Saturday night backup and clear of the 04:00
+# snapraid scrub. Weekly rather than daily because the drill reads real blobs
+# back out of Backblaze, and egress is billed.
+OnCalendar=Sun 06:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

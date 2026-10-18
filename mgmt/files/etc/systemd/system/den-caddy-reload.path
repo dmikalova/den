@@ -1,0 +1,11 @@
+[Unit]
+Description=Reload Caddy when its config changes
+# Adding an app to den is a line in the Caddyfile. This is what makes that
+# line take effect without anyone remembering the reload, and without bumping
+# a sentinel on every edit.
+
+[Path]
+PathChanged=/etc/caddy/Caddyfile
+
+[Install]
+WantedBy=multi-user.target
