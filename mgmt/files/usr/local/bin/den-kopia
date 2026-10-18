@@ -42,6 +42,7 @@ cache=/var/cache/kopia
 # to keep.
 sources=(
 	/srv/appdata
+	/srv/dumps
 	/mnt/storage
 )
 

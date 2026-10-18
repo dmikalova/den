@@ -61,7 +61,9 @@ func List(user string) []Check {
 		// part that is easy to be wrong about.
 		{"backup timer enabled", `systemctl is-enabled kopia-backup.timer`},
 		{"restore drill timer enabled", `systemctl is-enabled kopia-restore-drill.timer`},
-		{"backup repository connected", `[ -s /var/lib/kopia/repository.config ]`},
+		// The state directory is 0700 root, so this is the one check that
+		// cannot be made as the login user.
+		{"backup repository connected", `sudo -n test -s /var/lib/kopia/repository.config`},
 
 		// smbd binds tailscale0, so it fails to start when the tailnet is not
 		// up. Active therefore means both things are true.
@@ -70,8 +72,10 @@ func List(user string) []Check {
 		{"proxy running", `systemctl is-active caddy`},
 		{"proxy answering", `curl -fsS -o /dev/null http://127.0.0.1/`},
 
-		{"metrics running", `systemctl is-active netdata`},
-		{"metrics answering", `curl -fsS -o /dev/null http://127.0.0.1/netdata/`},
+		// The agent is a system unit and collects; the hub is a rootless
+		// quadlet and displays. Both have to be up for metrics to exist.
+		{"metrics agent running", `systemctl is-active beszel-agent`},
+		{"metrics answering", `curl -fsS -o /dev/null http://127.0.0.1:8090/`},
 	}
 }
 

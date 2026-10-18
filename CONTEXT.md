@@ -10,8 +10,8 @@ comments and commit messages.
 _Avoid:_ the NAS, the server, the box.
 
 **host layer** — what runs directly on den: mgmt, Tailscale, Podman,
-mergerfs, SnapRAID, snapper, smartd, Kopia, Netdata, Samba, Caddy, the NVIDIA
-driver, and the `den` binary. Everything else is a quadlet.
+mergerfs, SnapRAID, snapper, smartd, Kopia, the Beszel agent, Samba, Caddy,
+the NVIDIA driver, and the `den` binary. Everything else is a quadlet.
 
 **quadlet** — a rootless Podman container declared as a systemd unit.
 _Avoid:_ container, service, app, when the quadlet is meant.

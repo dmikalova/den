@@ -1,0 +1,14 @@
+[Unit]
+Description=Database dumps on the @dumps subvolume
+# Separate from @appdata because a dump is a consistent copy taken on purpose,
+# while a snapshot of a running database is only crash consistent.
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/srv/dumps
+Type=btrfs
+Options=defaults,subvol=@dumps
+
+[Install]
+WantedBy=local-fs.target

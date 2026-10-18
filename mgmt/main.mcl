@@ -175,12 +175,12 @@ exec "enable-linger" {
 #
 # The split is what makes a snapper rollback of / safe: without @home, rolling
 # the root subvolume back takes the home directory with it.
-exec "btrfs-subvols-v1" {
+exec "btrfs-subvols-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-subvols.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/btrfs-subvols-v1",
+	creates => "/var/lib/den/btrfs-subvols-v2",
 
 	Depend => Pkg["rsync"],
 }
@@ -203,6 +203,12 @@ file "/etc/systemd/system/srv-appdata.mount" {
 	mode => "0644",
 }
 
+file "/etc/systemd/system/srv-dumps.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/srv-dumps.mount"),
+	mode => "0644",
+}
+
 file "/etc/systemd/system/srv-models.mount" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/systemd/system/srv-models.mount"),
@@ -212,14 +218,14 @@ file "/etc/systemd/system/srv-models.mount" {
 # Mount units rather than fstab entries: fstab is written by the installer with
 # install-time UUIDs, so mgmt owning it would fight a rebuild. /dev/mapper/den-root
 # is named by the autoinstall template, which is in this repo, so it is stable.
-exec "btrfs-mounts-v1" {
+exec "btrfs-mounts-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-mounts.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/btrfs-mounts-v1",
+	creates => "/var/lib/den/btrfs-mounts-v2",
 
-	Depend => Exec["btrfs-subvols-v1"],
+	Depend => Exec["btrfs-subvols-v2"],
 }
 
 # The bulk storage: three btrfs data drives pooled with mergerfs, one ext4
@@ -234,7 +240,7 @@ file "/etc/systemd/system/mnt-disk1.mount" {
 	content => deploy.readfile("/files/etc/systemd/system/mnt-disk1.mount"),
 	mode => "0644",
 
-	Depend => Exec["btrfs-mounts-v1"],
+	Depend => Exec["btrfs-mounts-v2"],
 }
 
 file "/etc/systemd/system/mnt-disk2.mount" {
