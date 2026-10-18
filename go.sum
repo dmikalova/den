@@ -4,8 +4,8 @@ github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5 h1:IEjq88XO4PuBDcv
 github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5/go.mod h1:exZ0C/1emQJAw5tHOaUDyY1ycttqBAPcxuzf7QbY6ec=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dmikalova/project-standards v1.33.1 h1:+axQee/D5PTQ5xaAwGyO5TYh49LiavT/kV1TdvsglIc=
-github.com/dmikalova/project-standards v1.33.1/go.mod h1:vMyQZMZJDOLqw0CEPeE9aixdLzWmxB+GxGxPmtr/70s=
+github.com/dmikalova/project-standards v1.34.1 h1:KT3JEjR9uLEmS+tErU47cQyUh2/F8EEZ7gD487f/ntc=
+github.com/dmikalova/project-standards v1.34.1/go.mod h1:vMyQZMZJDOLqw0CEPeE9aixdLzWmxB+GxGxPmtr/70s=
 github.com/go-toolsmith/astcopy v1.0.2 h1:YnWf5Rnh1hUudj11kei53kI57quN/VH6Hp1n+erozn0=
 github.com/go-toolsmith/astcopy v1.0.2/go.mod h1:4TcEdbElGc9twQEYpVo/aieIXfHhiuLh4aLAck6dO7Y=
 github.com/go-toolsmith/astequal v1.0.0/go.mod h1:H+xSiq0+LtiDC11+h1G32h7Of5O3CYFJ99GVbS5lDKY=

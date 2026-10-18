@@ -20,33 +20,3 @@ jobs:
       id-token: write
       packages: write
     secrets: inherit
-
-  # den serves its own build of mgmt from its releases, so every release has to
-  # carry one or `den bootstrap` downloads a 404. bootstrap.go is the one place
-  # the version is declared; read it rather than repeating it here.
-  mgmt-version:
-    name: mgmt version
-    needs: cicd
-    if: needs.cicd.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.read.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: read
-        run: |
-          set -euo pipefail
-          version=$(grep -oP 'DefaultMgmtVersion = "\K[^"]+' internal/bootstrap/bootstrap.go)
-          echo "mgmt $version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-  mgmt:
-    name: mgmt
-    needs: [cicd, mgmt-version]
-    uses: ./.github/workflows/mgmt.yaml
-    permissions:
-      contents: write
-    with:
-      version: ${{ needs.mgmt-version.outputs.version }}
-      # Already carries the leading v.
-      tag: ${{ needs.cicd.outputs.version }}

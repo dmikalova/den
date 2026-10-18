@@ -4,7 +4,7 @@
       "configs": ["lefthook.jsonc"],
       "git_url": "https://github.com/dmikalova/project-standards",
       "ref": "main",
-      "refetch": true,
-    },
-  ],
+      "refetch": true
+    }
+  ]
 }
