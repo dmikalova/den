@@ -5,9 +5,9 @@ set -euo pipefail
 . /etc/os-release
 base=https://pkgs.tailscale.com/stable/ubuntu
 curl -fsSL "$base/${VERSION_CODENAME}.noarmor.gpg" \
-	-o /usr/share/keyrings/tailscale-archive-keyring.gpg
+  -o /usr/share/keyrings/tailscale-archive-keyring.gpg
 curl -fsSL "$base/${VERSION_CODENAME}.tailscale-keyring.list" \
-	-o /etc/apt/sources.list.d/tailscale.list
+  -o /etc/apt/sources.list.d/tailscale.list
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale
 touch /var/lib/den/tailscale-v1

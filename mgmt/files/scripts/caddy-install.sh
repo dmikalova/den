@@ -10,11 +10,11 @@ set -euo pipefail
 apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
 
 curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' |
-	gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 
 # The published list file already names the keyring above.
 curl -fsSL 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-	-o /etc/apt/sources.list.d/caddy-stable.list
+  -o /etc/apt/sources.list.d/caddy-stable.list
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y caddy

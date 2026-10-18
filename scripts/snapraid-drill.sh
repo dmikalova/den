@@ -28,33 +28,33 @@ rel=/.snapraid-drill/canary
 canary=$root$rel
 
 [ "$(id -u)" = 0 ] || {
-	echo "snapraid needs root" >&2
-	exit 1
+  echo "snapraid needs root" >&2
+  exit 1
 }
 
 # snapraid takes a whole-array lock, so a drill racing the nightly sync fails
 # halfway and leaves parity describing neither state.
 for unit in snapraid-sync.service snapraid-scrub.service; do
-	if systemctl is-active --quiet "$unit"; then
-		echo "$unit is running; wait for it to finish" >&2
-		exit 1
-	fi
+  if systemctl is-active --quiet "$unit"; then
+    echo "$unit is running; wait for it to finish" >&2
+    exit 1
+  fi
 done
 
 mountpoint -q "$root" || {
-	echo "$root is not mounted" >&2
-	exit 1
+  echo "$root is not mounted" >&2
+  exit 1
 }
 
 cleanup() {
-	rm -rf "$(dirname "$canary")"
+  rm -rf "$(dirname "$canary")"
 }
 
 # A drill that dies partway leaves parity describing a file that is gone. The
 # canary goes away either way; the sync that forgets it has to be run by hand.
 failed() {
-	cleanup
-	echo "drill failed; run 'snapraid sync' before the next one" >&2
+  cleanup
+  echo "drill failed; run 'snapraid sync' before the next one" >&2
 }
 trap failed EXIT
 
@@ -74,8 +74,8 @@ snapraid sync
 # is protecting nothing. One megabyte of canary cannot fit in 90 bytes of index.
 size=$(stat -c %s /var/lib/snapraid/snapraid.content)
 [ "$size" -gt 1024 ] || {
-	echo "content file is $size bytes; snapraid has indexed nothing" >&2
-	exit 1
+  echo "content file is $size bytes; snapraid has indexed nothing" >&2
+  exit 1
 }
 echo "   content file is $size bytes"
 
@@ -84,8 +84,8 @@ rm -f "$canary"
 snapraid fix -d "$disk" -f "$rel"
 got=$(sha256sum <"$canary" | cut -d' ' -f1)
 [ "$got" = "$want" ] || {
-	echo "restored file does not match: $got" >&2
-	exit 1
+  echo "restored file does not match: $got" >&2
+  exit 1
 }
 echo "   restored and identical"
 
@@ -100,8 +100,8 @@ sync
 snapraid fix -d "$disk" -f "$rel"
 got=$(sha256sum <"$canary" | cut -d' ' -f1)
 [ "$got" = "$want" ] || {
-	echo "repaired file does not match: $got" >&2
-	exit 1
+  echo "repaired file does not match: $got" >&2
+  exit 1
 }
 echo "   repaired and identical"
 

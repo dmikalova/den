@@ -8,7 +8,7 @@ set -euo pipefail
 # Guarded by mountpoint: run on a mounted path this would chmod the drive's own
 # root directory instead, which persists on the drive and locks the pool out.
 for d in /mnt/disk1 /mnt/disk2 /mnt/disk3 /mnt/parity1 /mnt/storage; do
-	mountpoint -q "$d" || install -d -o root -g root -m 0000 "$d"
+  mountpoint -q "$d" || install -d -o root -g root -m 0000 "$d"
 done
 
 systemctl daemon-reload
@@ -21,8 +21,8 @@ systemctl enable --now mnt-disk1.mount mnt-disk2.mount mnt-disk3.mount mnt-parit
 # The drive roots must be traversable: mergerfs acts as the calling user, so a
 # root-only drive directory makes the whole pool read as missing.
 for d in /mnt/disk1 /mnt/disk2 /mnt/disk3; do
-	chmod 0755 "$d"
-	install -d -o dmikalova -g dmikalova -m 0755 "$d/data"
+  chmod 0755 "$d"
+  install -d -o dmikalova -g dmikalova -m 0755 "$d/data"
 done
 
 systemctl enable --now mnt-storage.mount

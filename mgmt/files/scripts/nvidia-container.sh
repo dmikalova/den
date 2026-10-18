@@ -5,11 +5,11 @@ set -euo pipefail
 # $(ARCH) and carries no release name, which is why it works on a release
 # NVIDIA has not packaged for.
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey |
-	gpg --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit.gpg
+  gpg --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit.gpg
 
 curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |
-	sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit.gpg] https://#g' \
-		>/etc/apt/sources.list.d/nvidia-container-toolkit.list
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit.gpg] https://#g' \
+    >/etc/apt/sources.list.d/nvidia-container-toolkit.list
 
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-container-toolkit

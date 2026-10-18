@@ -18,10 +18,10 @@ systemctl --user start ollama.service
 # Wait for the API rather than the container, because the container is up well
 # before the server is listening and the pull below would race it.
 for _ in $(seq 60); do
-	if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
-		break
-	fi
-	sleep 2
+  if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
 done
 
 # The weights are not in the image. Pulling here means the first request is

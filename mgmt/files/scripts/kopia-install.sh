@@ -8,7 +8,7 @@
 set -euo pipefail
 
 curl -fsSL https://kopia.io/signing-key |
-	gpg --dearmor -o /usr/share/keyrings/kopia-keyring.gpg
+  gpg --dearmor -o /usr/share/keyrings/kopia-keyring.gpg
 cat >/etc/apt/sources.list.d/kopia.list <<'EOF'
 deb [signed-by=/usr/share/keyrings/kopia-keyring.gpg] http://packages.kopia.io/apt/ stable main
 EOF

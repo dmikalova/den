@@ -4,9 +4,9 @@ set -euo pipefail
 # .snapshots subvolume, so it has to run before any set-config. It errors if the
 # config already exists, hence the guard.
 for pair in root:/ home:/home appdata:/srv/appdata disk1:/mnt/disk1 disk2:/mnt/disk2 disk3:/mnt/disk3; do
-	cfg=${pair%%:*}
-	path=${pair#*:}
-	[ -e "/etc/snapper/configs/$cfg" ] || snapper -c "$cfg" create-config "$path"
+  cfg=${pair%%:*}
+  path=${pair#*:}
+  [ -e "/etc/snapper/configs/$cfg" ] || snapper -c "$cfg" create-config "$path"
 done
 
 # Only the subvolume itself is captured: a nested subvolume reads as an empty
@@ -18,16 +18,16 @@ done
 # timeline is here as well because mgmt edits /etc and nothing brackets that;
 # hourly 0 means the hourly run still fires but cleanup keeps only dailies.
 snapper -c root set-config \
-	TIMELINE_CREATE=yes \
-	TIMELINE_CLEANUP=yes \
-	TIMELINE_LIMIT_HOURLY=0 \
-	TIMELINE_LIMIT_DAILY=7 \
-	TIMELINE_LIMIT_WEEKLY=4 \
-	TIMELINE_LIMIT_MONTHLY=0 \
-	TIMELINE_LIMIT_YEARLY=0 \
-	NUMBER_CLEANUP=yes \
-	NUMBER_LIMIT=10 \
-	NUMBER_LIMIT_IMPORTANT=10
+  TIMELINE_CREATE=yes \
+  TIMELINE_CLEANUP=yes \
+  TIMELINE_LIMIT_HOURLY=0 \
+  TIMELINE_LIMIT_DAILY=7 \
+  TIMELINE_LIMIT_WEEKLY=4 \
+  TIMELINE_LIMIT_MONTHLY=0 \
+  TIMELINE_LIMIT_YEARLY=0 \
+  NUMBER_CLEANUP=yes \
+  NUMBER_LIMIT=10 \
+  NUMBER_LIMIT_IMPORTANT=10
 
 # These two change continuously and no package manager brackets them, so the
 # timeline is the only trigger they get.
@@ -37,17 +37,17 @@ snapper -c root set-config \
 # for a bad config or an accidental delete, and nothing more. Off-host backup
 # stays a separate job.
 for cfg in home appdata; do
-	snapper -c "$cfg" set-config \
-		TIMELINE_CREATE=yes \
-		TIMELINE_CLEANUP=yes \
-		TIMELINE_LIMIT_HOURLY=12 \
-		TIMELINE_LIMIT_DAILY=7 \
-		TIMELINE_LIMIT_WEEKLY=4 \
-		TIMELINE_LIMIT_MONTHLY=0 \
-		TIMELINE_LIMIT_YEARLY=0 \
-		NUMBER_CLEANUP=no \
-		ALLOW_USERS=dmikalova \
-		SYNC_ACL=yes
+  snapper -c "$cfg" set-config \
+    TIMELINE_CREATE=yes \
+    TIMELINE_CLEANUP=yes \
+    TIMELINE_LIMIT_HOURLY=12 \
+    TIMELINE_LIMIT_DAILY=7 \
+    TIMELINE_LIMIT_WEEKLY=4 \
+    TIMELINE_LIMIT_MONTHLY=0 \
+    TIMELINE_LIMIT_YEARLY=0 \
+    NUMBER_CLEANUP=no \
+    ALLOW_USERS=dmikalova \
+    SYNC_ACL=yes
 done
 
 # The data drives, snapshotted per drive because each is its own filesystem.
@@ -58,17 +58,17 @@ done
 # Hourly would be noise on drives that change a few times a week, and the
 # monthlies are kept because the mistake nobody notices is the slow one.
 for cfg in disk1 disk2 disk3; do
-	snapper -c "$cfg" set-config \
-		TIMELINE_CREATE=yes \
-		TIMELINE_CLEANUP=yes \
-		TIMELINE_LIMIT_HOURLY=0 \
-		TIMELINE_LIMIT_DAILY=7 \
-		TIMELINE_LIMIT_WEEKLY=4 \
-		TIMELINE_LIMIT_MONTHLY=3 \
-		TIMELINE_LIMIT_YEARLY=0 \
-		NUMBER_CLEANUP=no \
-		ALLOW_USERS=dmikalova \
-		SYNC_ACL=yes
+  snapper -c "$cfg" set-config \
+    TIMELINE_CREATE=yes \
+    TIMELINE_CLEANUP=yes \
+    TIMELINE_LIMIT_HOURLY=0 \
+    TIMELINE_LIMIT_DAILY=7 \
+    TIMELINE_LIMIT_WEEKLY=4 \
+    TIMELINE_LIMIT_MONTHLY=3 \
+    TIMELINE_LIMIT_YEARLY=0 \
+    NUMBER_CLEANUP=no \
+    ALLOW_USERS=dmikalova \
+    SYNC_ACL=yes
 done
 
 touch /var/lib/den/snapper-configs-v2

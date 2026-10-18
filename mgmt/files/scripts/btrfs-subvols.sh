@@ -7,7 +7,7 @@ mount -o subvolid=5 /dev/mapper/den-root "$top"
 trap 'umount "$top" 2>/dev/null || true; rmdir "$top" 2>/dev/null || true' EXIT
 
 for sv in @home @appdata @models @containers; do
-	[ -e "$top/$sv" ] || btrfs subvolume create "$top/$sv"
+  [ -e "$top/$sv" ] || btrfs subvolume create "$top/$sv"
 done
 
 # One-time copy of whatever the install left in @/home. Once the mount unit
@@ -15,7 +15,7 @@ done
 # get wrong once. Skipped if /home is already a mount, which means a previous
 # run finished.
 if ! mountpoint -q /home; then
-	rsync -aHAX --numeric-ids /home/ "$top/@home/"
+  rsync -aHAX --numeric-ids /home/ "$top/@home/"
 fi
 
 touch /var/lib/den/btrfs-subvols-v1

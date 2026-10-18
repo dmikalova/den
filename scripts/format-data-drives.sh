@@ -39,70 +39,70 @@ erase=false
 
 plan=()
 for name in mnt-disk1 mnt-disk2 mnt-disk3 mnt-parity1; do
-	unit=$units/$name.mount
-	[ -f "$unit" ] || {
-		echo "missing $unit" >&2
-		exit 1
-	}
+  unit=$units/$name.mount
+  [ -f "$unit" ] || {
+    echo "missing $unit" >&2
+    exit 1
+  }
 
-	what=$(sed -n 's/^What=//p' "$unit")
-	where=$(sed -n 's/^Where=//p' "$unit")
-	fstype=$(sed -n 's/^Type=//p' "$unit")
-	label=den-$(basename "$where")
+  what=$(sed -n 's/^What=//p' "$unit")
+  where=$(sed -n 's/^Where=//p' "$unit")
+  fstype=$(sed -n 's/^Type=//p' "$unit")
+  label=den-$(basename "$where")
 
-	[ -e "$what" ] || {
-		echo "no such drive: $what" >&2
-		exit 1
-	}
-	dev=$(readlink -f "$what")
+  [ -e "$what" ] || {
+    echo "no such drive: $what" >&2
+    exit 1
+  }
+  dev=$(readlink -f "$what")
 
-	# The one check that matters. A drive with anything mounted on it is in
-	# use, and the boot drive always is, so this is also what stops a typo in
-	# a unit from pointing mkfs at the running system.
-	if lsblk -no MOUNTPOINT "$dev" | grep -q .; then
-		echo "refusing: $what ($dev) has mounted filesystems" >&2
-		exit 1
-	fi
+  # The one check that matters. A drive with anything mounted on it is in
+  # use, and the boot drive always is, so this is also what stops a typo in
+  # a unit from pointing mkfs at the running system.
+  if lsblk -no MOUNTPOINT "$dev" | grep -q .; then
+    echo "refusing: $what ($dev) has mounted filesystems" >&2
+    exit 1
+  fi
 
-	existing=$(lsblk -no FSTYPE,LABEL "$dev" | head -1 | xargs || true)
-	printf '%-10s %-9s %-14s %s\n' "$where" "$fstype" "$label" "$what"
-	[ -n "$existing" ] && printf '%-10s %s\n' "" "ERASES EXISTING: $existing"
+  existing=$(lsblk -no FSTYPE,LABEL "$dev" | head -1 | xargs || true)
+  printf '%-10s %-9s %-14s %s\n' "$where" "$fstype" "$label" "$what"
+  [ -n "$existing" ] && printf '%-10s %s\n' "" "ERASES EXISTING: $existing"
 
-	plan+=("$fstype|$label|$dev")
+  plan+=("$fstype|$label|$dev")
 done
 
 if ! $erase; then
-	echo
-	echo "dry run. Re-run with --erase to destroy and recreate the above."
-	exit 0
+  echo
+  echo "dry run. Re-run with --erase to destroy and recreate the above."
+  exit 0
 fi
 
 echo
 echo "This erases every drive listed above. Type ERASE ALL DATA to continue."
 read -r reply
 [ "$reply" = "ERASE ALL DATA" ] || {
-	echo "aborted"
-	exit 1
+  echo "aborted"
+  exit 1
 }
 
 for entry in "${plan[@]}"; do
-	IFS='|' read -r fstype label dev <<<"$entry"
-	case $fstype in
-	btrfs)
-		mkfs.btrfs -q -f -L "$label" "$dev"
-		;;
-	ext4)
-		# No reserved blocks: nothing but snapraid parity lives here, and root
-		# never needs headroom on it. largefile4 trades inodes for the space
-		# one huge parity file actually wants.
-		mkfs.ext4 -q -F -m 0 -T largefile4 -L "$label" "$dev"
-		;;
-	*)
-		echo "unknown filesystem $fstype" >&2
-		exit 1
-		;;
-	esac
-	echo "made $fstype $label"
+  IFS='|' read -r fstype label dev <<<"$entry"
+  case $fstype in
+  btrfs)
+    mkfs.btrfs -q -f -L "$label" "$dev"
+    ;;
+  ext4)
+    # No reserved blocks: nothing but snapraid parity lives here, and root
+    # never needs headroom on it. largefile4 trades inodes for the space
+    # one huge parity file actually wants.
+    mkfs.ext4 -q -F -m 0 -T largefile4 -L "$label" "$dev"
+    ;;
+  *)
+    echo "unknown filesystem $fstype" >&2
+    exit 1
+    ;;
+  esac
+  echo "made $fstype $label"
 done
 
 echo
