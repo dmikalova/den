@@ -22,14 +22,13 @@ LimitNOFILE=1048576
 # infrastructure/docs/adr/0010.
 LoadCredentialEncrypted=gcp-key:/etc/den/credentials/gcp-key.cred
 Environment=GOOGLE_APPLICATION_CREDENTIALS=%d/gcp-key
-Environment=GCP_PROJECT=mklv-infrastructure
 
 # Certificates live under /var/lib/caddy. Losing them costs a re-issue, not an
 # outage, but re-issuing on every restart would hit Let's Encrypt's rate limit
 # soon enough to matter.
 StateDirectory=caddy
-LogsDirectory=caddy
 Environment=XDG_DATA_HOME=%S
+Environment=XDG_CONFIG_HOME=%S
 
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 PrivateTmp=true

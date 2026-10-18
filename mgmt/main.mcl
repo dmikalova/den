@@ -103,6 +103,10 @@ file "/etc/sysctl.d/99-den-rootless.conf" {
 # sysctl.d is read at boot, so a new file changes nothing on a running system.
 # Bump the sentinel after editing either file to apply it without a reboot.
 exec "sysctl-reload-v1" {
+	# Three tries, then report. An exec that cannot succeed will never
+	# succeed, and the default is to retry it until the unit times out.
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "sysctl --system >/dev/null && touch /var/lib/den/sysctl-reload-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/sysctl-reload-v1",
@@ -129,6 +133,8 @@ file "/etc/default/grub.d/99-den.cfg" {
 # comparison reruns this whenever the drop-in is newer and never otherwise,
 # which also makes it safe if mgmt orders the file write after this exec.
 exec "update-grub" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "update-grub",
 	shell => "/bin/bash",
 	ifcmd => "! test /boot/grub/grub.cfg -nt /etc/default/grub.d/99-den.cfg",
@@ -138,6 +144,8 @@ exec "update-grub" {
 # en_DK is the ISO 8601 locale: 24 hour clock and YYYY-MM-DD dates. Only
 # LC_TIME takes it, so messages stay in English.
 exec "locales-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "locale-gen en_US.UTF-8 en_DK.UTF-8 && update-locale LC_TIME=en_DK.UTF-8 && touch /var/lib/den/locales-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/locales-v1",
@@ -154,6 +162,8 @@ file "/etc/sudoers.d/den" {
 # Without lingering, the login user's quadlets stop at logout and never come
 # back after a reboot. Nothing reports this; the services are simply absent.
 exec "enable-linger" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "loginctl enable-linger dmikalova",
 	shell => "/bin/bash",
 	creates => "/var/lib/systemd/linger/dmikalova",
@@ -166,6 +176,8 @@ exec "enable-linger" {
 # The split is what makes a snapper rollback of / safe: without @home, rolling
 # the root subvolume back takes the home directory with it.
 exec "btrfs-subvols-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-subvols.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/btrfs-subvols-v1",
@@ -201,6 +213,8 @@ file "/etc/systemd/system/srv-models.mount" {
 # install-time UUIDs, so mgmt owning it would fight a rebuild. /dev/mapper/den-root
 # is named by the autoinstall template, which is in this repo, so it is stable.
 exec "btrfs-mounts-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-mounts.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/btrfs-mounts-v1",
@@ -258,6 +272,8 @@ file "/etc/systemd/system/mnt-storage.mount" {
 }
 
 exec "storage-mounts-v2" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/storage-mounts.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/storage-mounts-v2",
@@ -278,6 +294,8 @@ exec "storage-mounts-v2" {
 # create-config appends to SNAPPER_CONFIGS itself. Bump the sentinel to reapply
 # the tuning after editing the script.
 exec "snapper-configs-v2" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/snapper-configs.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/snapper-configs-v2",
@@ -331,6 +349,8 @@ file "/etc/systemd/system/snapraid-scrub.timer" {
 }
 
 exec "snapraid-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/snapraid-units.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/snapraid-units-v1",
@@ -357,6 +377,8 @@ file "/etc/systemd/system/nvidia-cdi-refresh.service" {
 }
 
 exec "nvidia-container-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/nvidia-container.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/nvidia-container-v1",
@@ -386,6 +408,8 @@ file "/root/.hushlogin" {
 # Enrolment is den apply's last step, not this one: the key cannot live in a
 # public repo. This only installs the package.
 exec "tailscale-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
@@ -404,6 +428,8 @@ file "/etc/default/tailscaled" {
 # den drops off the tailnet. LAN ssh is unaffected, so the way back is
 # den apply --host den.local.
 exec "tailscaled-flags-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "systemctl restart tailscaled && touch /var/lib/den/tailscaled-flags-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscaled-flags-v1",
@@ -419,6 +445,8 @@ svc "smartd" {
 
 # Bump the sentinel version to reapply.
 exec "ufw-policy-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/ufw-policy.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/ufw-policy-v1",
@@ -484,6 +512,8 @@ file "/etc/systemd/system/den-reconcile.timer" {
 # afterwards never reloaded systemd and the old unit stayed live. Bump the
 # version to pick up a unit change.
 exec "den-reconcile-units-v2" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "systemctl daemon-reload && systemctl enable --now den-reconcile.timer && touch /var/lib/den/den-reconcile-units-v2",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/den-reconcile-units-v2",
@@ -502,6 +532,8 @@ exec "den-reconcile-units-v2" {
 # den itself does the reporting, so the binary has to be on the host. Bump the
 # version here and in den-install.sh together.
 exec "den-binary-v1.9.0" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/den-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/den-binary-v1.9.0",
@@ -541,6 +573,8 @@ file "/etc/systemd/system/service.d/10-den-onfailure.conf" {
 # notifier. systemd detects most such loops, but the manual says to break the
 # chain explicitly and this is cheaper than finding out it did not.
 exec "den-notify-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "mkdir -p /etc/systemd/system/den-notify@.service.d && ln -sfn /dev/null /etc/systemd/system/den-notify@.service.d/10-den-onfailure.conf && systemctl daemon-reload && touch /var/lib/den/den-notify-units-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/den-notify-units-v1",
@@ -587,6 +621,8 @@ file "/etc/systemd/system/den-secrets.service" {
 # `den apply` writes after this converge, and starting it before then would
 # fail on a host that is otherwise fine. Bump the version for a unit change.
 exec "den-secrets-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => "systemctl daemon-reload && systemctl enable den-secrets.service && touch /var/lib/den/den-secrets-units-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/den-secrets-units-v1",
@@ -604,6 +640,8 @@ exec "den-secrets-units-v1" {
 # Everything below reads its credentials from /run/den/secrets, so it chains
 # after the secrets path rather than running beside it.
 exec "kopia-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/kopia-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/kopia-v1",
@@ -663,6 +701,8 @@ file "/etc/systemd/system/kopia-restore-drill.timer" {
 
 # Bump the version for a unit change; the sentinel is what makes this run once.
 exec "kopia-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/kopia-units.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/kopia-units-v1",
@@ -705,6 +745,8 @@ file "/etc/systemd/system/den-samba.service" {
 # Enabled, not started: the password comes from the secrets path, which is not
 # populated until `den apply` has written the sealed key.
 exec "samba-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/samba-units.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/samba-units-v1",
@@ -718,6 +760,8 @@ exec "samba-units-v1" {
 # an app is a reverse_proxy line in one file, and without it every app invents
 # its own port and its own answer to who can reach it.
 exec "caddy-v2" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/caddy-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/caddy-v2",
@@ -782,6 +826,8 @@ file "/etc/systemd/system/den-caddy-reload.path" {
 }
 
 exec "caddy-units-v2" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/caddy-units.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/caddy-units-v2",
@@ -802,6 +848,8 @@ exec "caddy-units-v2" {
 # isolation the container exists for. The hub it reports to is a quadlet in
 # the user layer, where every other app lives.
 exec "beszel-agent-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/beszel-agent.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/beszel-agent-v1",
@@ -810,6 +858,8 @@ exec "beszel-agent-v1" {
 }
 
 exec "beszel-hub-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/beszel-hub.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/beszel-hub-v1",
@@ -838,6 +888,8 @@ file "/etc/systemd/system/beszel-agent.service" {
 }
 
 exec "beszel-agent-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/beszel-agent-units.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/beszel-agent-units-v1",

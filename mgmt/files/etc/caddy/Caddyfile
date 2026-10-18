@@ -7,7 +7,6 @@
 # from the public internet, so HTTP-01 cannot be answered; den writes the
 # challenge into its own Cloud DNS zone instead. See
 # infrastructure/docs/adr/0010.
-
 {
 	# Admin API on loopback, which is the default. It is left on because
 	# `systemctl reload caddy` goes through it; turning it off would make a
@@ -20,7 +19,9 @@
 den.mklv.tech, *.den.mklv.tech {
 	tls {
 		dns googleclouddns {
-			gcp_project {$GCP_PROJECT}
+			# Inline, not an env var: `caddy validate` runs without the
+			# unit's environment, and the plugin rejects an empty id.
+			gcp_project mklv-infrastructure
 		}
 	}
 
@@ -33,11 +34,11 @@ den.mklv.tech, *.den.mklv.tech {
 		close
 	}
 
+	# To the journal, where every other log on this host already is. Not a
+	# file: `caddy validate` runs as root and creates the log as 0600 root,
+	# and caddy runs as caddy, so the next reload cannot open it.
 	log {
-		output file /var/log/caddy/access.log {
-			roll_size 10MiB
-			roll_keep 5
-		}
+		output stderr
 	}
 
 	# Apps go here, one matcher each, each proxying to a localhost port. A

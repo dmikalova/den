@@ -23,6 +23,10 @@ fi
 rm -f /etc/apt/sources.list.d/caddy-stable.list \
   /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 
+# Access logs go to the journal now. The leftover file is root-owned 0600,
+# which is what wedged every reload while it was still in the Caddyfile.
+rm -rf /var/log/caddy
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 

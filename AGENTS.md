@@ -59,6 +59,10 @@ someone edits the file.
   their own systemd. den's services are rootless Podman quadlets.
 - Every `exec` resource needs a `creates` or equivalent guard, or the run
   stops being idempotent.
+- Every `exec` resource sets `Meta:retry => 3` and `Meta:delay => 15000`.
+  mgmt's default is to retry a failing resource forever, which holds the
+  reconcile open until `TimeoutStartSec` kills it half an hour later and no
+  one learns which resource failed.
 - `den apply --dry-run` prints the shell and contacts nothing.
   `den apply --noop` runs mgmt and reports what it would change. They are not
   the same check.
