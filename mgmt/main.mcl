@@ -700,12 +700,12 @@ file "/etc/systemd/system/kopia-restore-drill.timer" {
 }
 
 # Bump the version for a unit change; the sentinel is what makes this run once.
-exec "kopia-units-v1" {
+exec "kopia-units-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/kopia-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/kopia-units-v1",
+	creates => "/var/lib/den/kopia-units-v2",
 
 	Depend => File["/etc/systemd/system/kopia-restore-drill.timer"],
 }
@@ -723,7 +723,7 @@ file "/etc/samba/smb.conf" {
 	content => deploy.readfile("/files/etc/samba/smb.conf"),
 	mode => "0644",
 
-	Depend => Exec["kopia-units-v1"],
+	Depend => Exec["kopia-units-v2"],
 }
 
 file "/usr/local/bin/den-samba-user" {

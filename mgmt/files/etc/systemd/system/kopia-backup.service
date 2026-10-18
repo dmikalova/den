@@ -12,11 +12,13 @@ RequiresMountsFor=/srv/appdata /mnt/storage
 Type=oneshot
 ExecStart=/usr/local/bin/den-kopia
 
-# Four names, four files, and nothing else from /run/den/secrets reaches this
+# Six names, six files, and nothing else from /run/den/secrets reaches this
 # process. The unit file is the allowlist.
 LoadCredential=b2-bucket:/run/den/secrets/B2_BUCKET
+LoadCredential=b2-endpoint:/run/den/secrets/B2_ENDPOINT
 LoadCredential=b2-key:/run/den/secrets/B2_KEY
 LoadCredential=b2-key-id:/run/den/secrets/B2_KEY_ID
+LoadCredential=b2-region:/run/den/secrets/B2_REGION
 LoadCredential=kopia-password:/run/den/secrets/KOPIA_PASSWORD
 
 # The repository connection, which must outlive a reboot, and the cache, which

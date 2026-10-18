@@ -13,6 +13,10 @@
 # Run by kopia-backup.service, which is what grants the credentials. Running it
 # by hand needs that service's environment, so run the service instead:
 #   systemctl start kopia-backup.service
+#
+# The bucket is a Backblaze B2 bucket reached over Backblaze's S3-compatible
+# endpoint, not kopia's b2 provider. B2's native API is closed to the key this
+# host holds, and kopia has deprecated that provider anyway.
 set -euo pipefail
 
 creds=${CREDENTIALS_DIRECTORY:?run this through kopia-backup.service}
@@ -20,6 +24,8 @@ creds=${CREDENTIALS_DIRECTORY:?run this through kopia-backup.service}
 export KOPIA_PASSWORD
 KOPIA_PASSWORD=$(<"$creds/kopia-password")
 bucket=$(<"$creds/b2-bucket")
+endpoint=$(<"$creds/b2-endpoint")
+region=$(<"$creds/b2-region")
 key_id=$(<"$creds/b2-key-id")
 key=$(<"$creds/b2-key")
 
@@ -43,20 +49,24 @@ connect() {
 	# connect first, create second. The repository usually exists, and `create`
 	# against an existing one is an error rather than a no-op, so the order
 	# decides whether the normal path is quiet.
-	if kopia repository connect b2 \
+	if kopia repository connect s3 \
 		--bucket="$bucket" \
-		--key-id="$key_id" \
-		--key="$key" \
+		--endpoint="$endpoint" \
+		--region="$region" \
+		--access-key="$key_id" \
+		--secret-access-key="$key" \
 		--cache-directory="$cache" \
 		--no-check-for-updates 2>/dev/null; then
 		return 0
 	fi
 
-	echo "no repository at b2://$bucket; creating one"
-	kopia repository create b2 \
+	echo "no repository at s3://$bucket; creating one"
+	kopia repository create s3 \
 		--bucket="$bucket" \
-		--key-id="$key_id" \
-		--key="$key" \
+		--endpoint="$endpoint" \
+		--region="$region" \
+		--access-key="$key_id" \
+		--secret-access-key="$key" \
 		--cache-directory="$cache" \
 		--no-check-for-updates
 }
