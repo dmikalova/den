@@ -50,13 +50,16 @@ Discord message. A unit that stops running entirely is not; that is what
 
 ## Credentials
 
-The bucket, the key that reaches it, and the repository password are all
-created by the `infrastructure` repo and fetched by `den-secrets.service`.
-Nothing is typed, and nothing is in either repository.
+The bucket and the key that reaches it are created by the `infrastructure`
+repo and fetched by `den-secrets.service`. Nothing is typed.
 
 Encryption is client side. Backblaze holds ciphertext, so `KOPIA_PASSWORD` is
 the whole of what makes the backup readable. Losing it loses the backup as
-surely as deleting the bucket.
+surely as deleting the bucket. It is the one secret here that cannot be
+reissued, so it is not generated: it is chosen and kept in
+`secrets/den.sops.json` in the `infrastructure` repo, beside the LUKS
+passphrase. A clone of that repo and the age key in Bitwarden recover it with
+GCP gone.
 
 ## Restore a file
 
