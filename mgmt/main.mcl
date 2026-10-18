@@ -18,7 +18,6 @@ pkg [
 	"lm-sensors",
 	"mergerfs",
 	"ncurses-term",
-	"netdata",
 	"nvidia-driver-595-open",
 	"passt",
 	"podman",
@@ -52,6 +51,13 @@ pkg [
 # converger gives up. Fixed upstream after 1.1.0. mkdir already gives 0755.
 file "/var/lib/den/" {
 	state => "exists",
+
+	# Anchors the whole den-services chain below this behind the package set.
+	# Every `pkg` above merges into one autogroup, so depending on any single
+	# member waits for all of them. Without this the chain races the autogroup:
+	# file resources land before the package that owns their directory, and the
+	# kopia and caddy installs fight that same apt run for the dpkg lock.
+	Depend => Pkg["rsync"],
 }
 
 # The install asks for kernel-crash-dumps to be off and does not get it, so
@@ -753,22 +759,57 @@ exec "caddy-units-v1" {
 
 # What the host looks like from the outside.
 #
-# Netdata is in the host layer because its whole job is to see the host: a
-# container watching drive temperatures and ZRAM through a namespace is
-# fighting the isolation the container exists for.
-file "/etc/netdata/netdata.conf" {
-	state => "exists",
-	content => deploy.readfile("/files/etc/netdata/netdata.conf"),
-	mode => "0644",
+# Beszel, not netdata: netdata was dropped from the Ubuntu archive before
+# 26.04 and has no replacement there, and the thing den actually needs watched
+# is systemd. Its real failures are kopia-backup.timer not firing,
+# den-samba.service dying and den-reconcile wedging. Beszel reports unit
+# state, restart counts and journal tails; netdata never did.
+#
+# The agent is in the host layer because its whole job is to see the host.
+# SMART, hwmon and the journal through a container namespace is fighting the
+# isolation the container exists for. The hub it reports to is a quadlet in
+# the user layer, where every other app lives.
+exec "beszel-agent-v1" {
+	cmd => deploy.readfile("/files/scripts/beszel-agent.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/beszel-agent-v1",
 
 	Depend => Exec["caddy-units-v1"],
 }
 
-exec "netdata-units-v1" {
-	cmd => deploy.readfile("/files/scripts/netdata-units.sh"),
+exec "beszel-hub-v1" {
+	cmd => deploy.readfile("/files/scripts/beszel-hub.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/netdata-units-v1",
+	creates => "/var/lib/den/beszel-hub-v1",
 
-	Depend => File["/etc/netdata/netdata.conf"],
+	Depend => Exec["beszel-agent-v1"],
+}
+
+# In the host layer despite belonging to the hub: it has to be in place before
+# the hub's first start, and the host layer runs first.
+file "/srv/appdata/beszel/config.yml" {
+	state => "exists",
+	content => deploy.readfile("/files/srv/appdata/beszel/config.yml"),
+	owner => "dmikalova",
+	group => "dmikalova",
+	mode => "0644",
+
+	Depend => Exec["beszel-hub-v1"],
+}
+
+file "/etc/systemd/system/beszel-agent.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/beszel-agent.service"),
+	mode => "0644",
+
+	Depend => File["/srv/appdata/beszel/config.yml"],
+}
+
+exec "beszel-agent-units-v1" {
+	cmd => deploy.readfile("/files/scripts/beszel-agent-units.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/beszel-agent-units-v1",
+
+	Depend => File["/etc/systemd/system/beszel-agent.service"],
 }
 

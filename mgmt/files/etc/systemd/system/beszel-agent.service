@@ -1,0 +1,42 @@
+[Unit]
+Description=Beszel agent, den's metrics collector
+After=network-online.target
+Wants=network-online.target
+# After, not RequiresMountsFor. A monitor has to come up exactly when a mount
+# has failed, which is the one case RequiresMountsFor would keep it down.
+After=mnt-disk1.mount mnt-disk2.mount mnt-disk3.mount mnt-parity1.mount
+After=mnt-storage.mount
+# The exception: the key below lives here, so this one is a hard requirement.
+RequiresMountsFor=/srv/appdata
+
+[Service]
+Type=simple
+ExecStart=/opt/beszel-agent/beszel-agent
+Restart=always
+RestartSec=10
+
+# The hub's own public key, read straight from the hub's data directory on
+# this same host. Nothing here is a secret and nothing is copied: the hub
+# keeps the private half beside it and dials this agent with it.
+Environment=KEY_FILE=/srv/appdata/beszel/id_ed25519.pub
+
+# Runs as root, unlike the agent's own packaging. SMART reads need the raw
+# devices, and the point of this host is knowing a drive is dying.
+User=root
+
+# Unit state, restart counts and the tail of each unit's journal. This is the
+# half of monitoring netdata did not cover, and it is the half that matters
+# here: den's real failures are kopia-backup.timer not firing and
+# den-samba.service dying, not a CPU graph.
+SupplementaryGroups=systemd-journal
+
+# Loopback only. The hub is on this same host, so the SSH connection never
+# leaves it and the hub's lack of agent host-key verification cannot matter.
+Environment=LISTEN=127.0.0.1:45876
+
+# The array members and parity are separate filesystems. Without naming them
+# only the mergerfs pool is reported, and a single failing disk is invisible.
+Environment=EXTRA_FILESYSTEMS=/mnt/disk1,/mnt/disk2,/mnt/disk3,/mnt/parity1
+
+[Install]
+WantedBy=multi-user.target

@@ -17,10 +17,10 @@ SMB3 is the minimum protocol and encryption is required, so a session that
 cannot encrypt does not connect. There is no guest access and no NetBIOS;
 `nmbd` is masked.
 
-| Share | Path | Notes |
-| --- | --- | --- |
-| `storage` | `/mnt/storage` | the pooled array; `timemachine` is vetoed here |
-| `timemachine` | `/mnt/storage/timemachine` | 2 TB cap, 0700 |
+| Share         | Path                       | Notes                                          |
+| ------------- | -------------------------- | ---------------------------------------------- |
+| `storage`     | `/mnt/storage`             | the pooled array; `timemachine` is vetoed here |
+| `timemachine` | `/mnt/storage/timemachine` | 2 TB cap, 0700                                 |
 
 ## Connect
 

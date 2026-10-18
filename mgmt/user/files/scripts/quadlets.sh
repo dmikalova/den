@@ -15,6 +15,10 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 systemctl --user daemon-reload
 systemctl --user start ollama.service
 
+# /srv/appdata/beszel and the hub's key pair are made by the host layer, so
+# the hub adopts a key the agent already trusts instead of generating its own.
+systemctl --user start beszel.service
+
 # Wait for the API rather than the container, because the container is up well
 # before the server is listening and the pull below would race it.
 for _ in $(seq 60); do
@@ -30,4 +34,4 @@ done
 podman exec ollama ollama pull qwen3:14b
 
 mkdir -p "${HOME}/.local/state/den"
-touch "${HOME}/.local/state/den/quadlets-v1"
+touch "${HOME}/.local/state/den/quadlets-v2"

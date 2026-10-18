@@ -37,10 +37,18 @@ file "/home/dmikalova/.config/containers/systemd/ollama.container" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/"],
 }
 
-exec "quadlets-v1" {
-	cmd => deploy.readfile("/files/scripts/quadlets.sh"),
-	shell => "/bin/bash",
-	creates => "/home/dmikalova/.local/state/den/quadlets-v1",
+file "/home/dmikalova/.config/containers/systemd/beszel.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/beszel.container"),
+	mode => "0644",
 
 	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container"],
+}
+
+exec "quadlets-v2" {
+	cmd => deploy.readfile("/files/scripts/quadlets.sh"),
+	shell => "/bin/bash",
+	creates => "/home/dmikalova/.local/state/den/quadlets-v2",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
 }

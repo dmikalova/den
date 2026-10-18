@@ -34,12 +34,14 @@
 
 	# Apps go here, one block each, each proxying to a localhost port.
 
-	# Netdata. It binds 127.0.0.1 and has no authentication of its own, so
-	# the tailnet check above is the whole of its access control.
-	handle_path /netdata/* {
-		reverse_proxy 127.0.0.1:19999
+	# Beszel, the monitoring hub. Unlike the rest of these it has a login of
+	# its own, so the tailnet check above is a second lock rather than the
+	# only one. It still binds 127.0.0.1: the login is not a reason to put a
+	# PocketBase admin panel on the internet.
+	handle_path /beszel/* {
+		reverse_proxy 127.0.0.1:8090
 	}
-	redir /netdata /netdata/
+	redir /beszel /beszel/
 
 	handle {
 		respond "den" 200
