@@ -14,10 +14,14 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | `cmd/den`              | The command line: `usb`, and the operational subcommands |
 | `internal/autoinstall` | The Subiquity seed: user-data, GRUB patch, ISO remaster  |
 | `internal/bootstrap`   | The two passes that configure a freshly installed den    |
+| `internal/check`       | The assertions behind `den check`                        |
 | `internal/fetch`       | Downloading a file over HTTP and checking its sum        |
 | `internal/gcp`         | Reading Secret Manager with a service account key        |
 | `internal/memtest`     | Fetching the memtest86+ boot image                       |
+| `internal/notify`      | Posting a Discord embed and pinging the healthcheck      |
+| `internal/progress`    | Progress reporting for the long-running commands         |
 | `internal/remote`      | Running a script on den over ssh                         |
+| `internal/secrets`     | The key names den reads out of the GCP secrets           |
 | `internal/usbdisk`     | Finding a removable disk and writing an image to it      |
 
 ## Rules
