@@ -29,12 +29,43 @@ file "/home/dmikalova/.config/containers/systemd/" {
 	Depend => File["/home/dmikalova/.config/containers/"],
 }
 
+# Hardening for every .container file, merged in by quadlet. A new service is
+# hardened by existing, rather than by someone remembering to copy four lines.
+file "/home/dmikalova/.config/containers/systemd/container.d/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/container.d/10-hardening.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/container.d/10-hardening.conf"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/container.d/"],
+}
+
 file "/home/dmikalova/.config/containers/systemd/ollama.container" {
 	state => "exists",
 	content => deploy.readfile("/files/containers/systemd/ollama.container"),
 	mode => "0644",
 
-	Depend => File["/home/dmikalova/.config/containers/systemd/"],
+	Depend => File["/home/dmikalova/.config/containers/systemd/container.d/10-hardening.conf"],
+}
+
+# The one exception to the shared hardening. See the file for why.
+file "/home/dmikalova/.config/containers/systemd/ollama.container.d/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/ollama.container.d/10-writable-rootfs.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/ollama.container.d/10-writable-rootfs.conf"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container.d/"],
 }
 
 file "/home/dmikalova/.config/containers/systemd/beszel.container" {
@@ -42,17 +73,17 @@ file "/home/dmikalova/.config/containers/systemd/beszel.container" {
 	content => deploy.readfile("/files/containers/systemd/beszel.container"),
 	mode => "0644",
 
-	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container"],
+	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container.d/10-writable-rootfs.conf"],
 }
 
-exec "quadlets-v3" {
+exec "quadlets-v4" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
     Meta:retry => 3,
     Meta:delay => 15000,
     cmd => deploy.readfile("/files/scripts/quadlets.sh"),
     shell => "/bin/bash",
-    creates => "/home/dmikalova/.local/state/den/quadlets-v3",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v4",
 
 	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
 }
