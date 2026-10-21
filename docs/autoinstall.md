@@ -287,29 +287,37 @@ Enter it once. The TPM takes over from the second boot.
    Reboot and confirm it comes up with no prompt. **Keep the passphrase in
    Bitwarden.** A firmware update changes PCR 7 and you will need it.
 
-3. Install Tailscale and join the tailnet:
-
-   ```sh
-   curl -fsSL https://tailscale.com/install.sh | sh
-   sudo tailscale up --ssh
-   ```
-
-4. Apply the host config:
+3. Apply the host config:
 
    ```sh
    den bootstrap
    den apply
    ```
 
+   `den apply` installs Tailscale through mgmt and joins the tailnet itself,
+   with the auth key from `tailscale-den` and `tag:den`. Do not run
+   `tailscale up` by hand first. The binary is not on the host until this step
+   installs it.
+
    `den apply` also reads den's service account key out of `den-install` and
    seals it to the TPM, so den can fetch its own secrets from then on. That
    key is the only credential ever delivered to den.
 
+4. Reboot for the NVIDIA driver. mgmt installs it but does not reboot, and the
+   GPU container stack stays broken until the module loads.
+
 5. Confirm the host can reach you:
 
    ```sh
-   den notify --level ok --title bootstrap
+   ssh den sudo den notify --title bootstrap "den is up"
    ```
 
    The message lands in Discord. If it does not, nothing later will tell you
-   when something breaks, so fix it before you go on.
+   when something breaks, so fix it before you go on. `den notify` needs root
+   because `/etc/den` is `0700`.
+
+6. Run the smoke checks:
+
+   ```sh
+   den check
+   ```

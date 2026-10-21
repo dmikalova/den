@@ -41,11 +41,11 @@ Configure the host once the install has finished:
 
 ```bash
 den bootstrap
-ssh den sudo tailscale up --ssh
 den apply
 ```
 
-`bootstrap` patches the fresh install and puts mgmt and Tailscale on it.
-`apply` converges the root layer described in `mgmt/`, and is safe to repeat.
+`bootstrap` patches the fresh install and puts mgmt on it. `apply` converges
+the root layer described in `mgmt/`, installs Tailscale and joins the tailnet,
+and is safe to repeat.
 
 See [docs/bootstrap.md](docs/bootstrap.md) for the full procedure.

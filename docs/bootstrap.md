@@ -34,10 +34,9 @@ ssh-keygen -R den
 den bootstrap
 ```
 
-It waits for ssh, prints what it found, then patches the system, installs the
-pinned mgmt release and tailscale, and reboots if the kernel moved. Steps that
-need root run under `sudo` with a terminal attached, so sudo prompts for your
-password.
+It waits for ssh, prints what it found, then patches the system and installs
+the pinned mgmt release. Steps that need root run under `sudo` with a terminal
+attached, so sudo prompts for your password.
 
 mgmt is installed from the GitHub release binary and checked against the sums
 file published beside it. den does not pipe an install script into a shell.
@@ -48,11 +47,10 @@ fully functional, because the server has never heard of your terminal. den
 reads the description from whatever `$TERM` names locally, so this works for
 any terminal and carries no hardcoded list.
 
-Tailscale is installed but not enrolled. Finish that by hand once:
-
-```bash
-ssh den sudo tailscale up --ssh --advertise-tags=tag:server
-```
+Tailscale is not installed yet. mgmt installs it during `den apply`, and
+`den apply` then enrols the node itself with the auth key from the
+`tailscale-den` secret and `tag:den`. Do not run `tailscale up` by hand here:
+the binary is not on the host.
 
 The tag matters twice. A tagged node's key never expires, so den is not
 quietly evicted from the tailnet after six months, and the ACL rule that lets

@@ -18,7 +18,7 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | `internal/fetch`       | Downloading a file over HTTP and checking its sum        |
 | `internal/gcp`         | Reading Secret Manager with a service account key        |
 | `internal/memtest`     | Fetching the memtest86+ boot image                       |
-| `internal/notify`      | Posting a Discord embed and pinging the healthcheck      |
+| `internal/notify`      | Posting a Discord embed and pinging a healthcheck        |
 | `internal/progress`    | Progress reporting for the long-running commands         |
 | `internal/remote`      | Running a script on den over ssh                         |
 | `internal/secrets`     | The key names den reads out of the GCP secrets           |

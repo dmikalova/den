@@ -501,9 +501,11 @@ file "/etc/apt/apt.conf.d/20auto-upgrades" {
 #      so a restored root still has an entry it can boot, but picking it is a
 #      human at the GRUB menu, not something that recovers on its own
 #   3. a dead man notification exists to report the host did not come back.
-#      Unit failures now alert through den-notify@.service, but that runs on
-#      den, so it cannot report den being absent. The external healthcheck is
-#      still missing, and it is the half that matters here
+#      Unit failures alert through den-notify@.service, but that runs on den,
+#      so it cannot report den being absent. kestrel is the other half: the
+#      nightly jobs ping it on success and it alerts on silence. That covers
+#      a host that never came back, but only within one night, so this stays
+#      false until a boot-time ping narrows the window
 file "/etc/apt/apt.conf.d/52den-unattended" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/apt/apt.conf.d/52den-unattended"),
@@ -850,12 +852,12 @@ file "/etc/systemd/system/den-caddy-reload.path" {
 	Depend => File["/etc/systemd/system/den-caddy-reload.service"],
 }
 
-exec "caddy-units-v2" {
+exec "caddy-units-v3" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/caddy-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/caddy-units-v2",
+	creates => "/var/lib/den/caddy-units-v3",
 
 	Depend => File["/etc/systemd/system/den-caddy-reload.path"],
 }
@@ -879,7 +881,7 @@ exec "beszel-agent-v1" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/beszel-agent-v1",
 
-	Depend => Exec["caddy-units-v2"],
+	Depend => Exec["caddy-units-v3"],
 }
 
 exec "beszel-hub-v1" {

@@ -6,5 +6,12 @@ RequiresMountsFor=/mnt/disk1 /mnt/disk2 /mnt/disk3 /mnt/parity1
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/snapraid sync
+
+# Feeds the dead-man's switch. systemd skips ExecStartPost= when ExecStart=
+# fails, so the ping happens on success only, which is what makes silence
+# mean something. The "-" keeps a failed ping from failing the sync: the
+# parity is already written, and the missed ping raises the alarm by itself.
+ExecStartPost=-/usr/local/bin/den ping snapraid-sync
+
 Nice=10
 IOSchedulingClass=idle

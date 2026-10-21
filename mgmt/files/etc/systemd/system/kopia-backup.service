@@ -12,6 +12,12 @@ RequiresMountsFor=/srv/appdata /mnt/storage
 Type=oneshot
 ExecStart=/usr/local/bin/den-kopia
 
+# Feeds the dead-man's switch. systemd skips ExecStartPost= when ExecStart=
+# fails, so the ping happens on success only, which is what makes silence
+# mean something. The "-" keeps a failed ping from failing the backup: the
+# data is already offsite, and the missed ping raises the alarm by itself.
+ExecStartPost=-/usr/local/bin/den ping kopia-backup
+
 # Six names, six files, and nothing else from /run/den/secrets reaches this
 # process. The unit file is the allowlist.
 LoadCredential=b2-bucket:/run/den/secrets/B2_BUCKET

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,10 +16,10 @@ import (
 )
 
 // These live on den, not in the repository. The webhook is a bearer credential
-// and the healthcheck URL identifies the check, so both are secrets.
+// and a healthcheck URL identifies the check, so both are secrets.
 const (
-	defaultWebhookFile = "/etc/den/discord-webhook"
-	defaultPingFile    = "/etc/den/healthcheck-url"
+	defaultWebhookFile    = "/etc/den/discord-webhook"
+	defaultHealthcheckDir = "/etc/den/healthcheck"
 )
 
 // journalLines is how much context travels with a failure. Discord cuts an
@@ -38,11 +39,6 @@ func notifyHost(ctx context.Context, args []string, stdout, stderr io.Writer) er
 		"webhook-file",
 		defaultWebhookFile,
 		"file holding the Discord webhook URL",
-	)
-	pingFile := fs.String(
-		"ping-file",
-		defaultPingFile,
-		"file holding a healthcheck URL to ping on success",
 	)
 	lines := fs.Int("lines", journalLines, "journal lines to include with -unit")
 	if err := fs.Parse(args); err != nil {
@@ -83,16 +79,44 @@ func notifyHost(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	}
 	_, _ = fmt.Fprintln(stdout, "alert sent")
 
-	// A missing healthcheck URL is not an error: most alerts are not jobs.
-	// A present but failing one is worth saying out loud, but it must not fail
-	// the command, because the alert itself already landed.
-	ping, err := readSecret(*pingFile)
+	return nil
+}
+
+// pingHost feeds one dead-man's switch. It is deliberately separate from
+// den notify: an alert says something went wrong, a ping says a job finished,
+// and sending one when the other is meant inverts the switch. Pinging from the
+// failure path is what makes a broken host look alive.
+func pingHost(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("den ping", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dir := fs.String("dir", defaultHealthcheckDir, "directory holding one URL per check")
+	if err := fs.Parse(args); err != nil {
+		return fmt.Errorf("den ping: %w", errUsage)
+	}
+
+	if fs.NArg() != 1 {
+		return fmt.Errorf("den ping needs exactly one check name: %w", errUsage)
+	}
+	name := fs.Arg(0)
+	if strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+		return fmt.Errorf("check name %q is not a usable file name: %w", name, errUsage)
+	}
+
+	// An absent URL means the check is not declared yet, which is the normal
+	// state between adding a job and adding its check. ExecStartPost= would
+	// otherwise turn that into a failed unit on a host that is fine.
+	url, err := readSecret(filepath.Join(*dir, name))
 	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "den: no healthcheck URL for %s, not pinging\n", name)
+
 		return nil
 	}
-	if err := notify.Ping(ctx, ping); err != nil {
-		_, _ = fmt.Fprintf(stderr, "den: the healthcheck ping failed: %v\n", err)
+
+	if err := notify.Ping(ctx, url); err != nil {
+		return fmt.Errorf("pinging the %s healthcheck: %w", name, err)
 	}
+	_, _ = fmt.Fprintf(stdout, "pinged %s\n", name)
+
 	return nil
 }
 

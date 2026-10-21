@@ -52,12 +52,17 @@ _Avoid:_ backup test.
 
 ## Operating
 
-**notify** — one call that posts a Discord embed and pings the matching
-healthcheck. Every scheduled job ends in a notify.
+**notify** — one call that posts a Discord embed. It says something went
+wrong, so `OnFailure=` is what drives it.
 
-**healthcheck** — the dead-man's-switch endpoint on Cloud Run. Jobs ping on
-success. Silence raises the alarm.
-_Avoid:_ heartbeat, ping, monitor.
+**ping** — one call that feeds a healthcheck and says nothing else. It says a
+job finished, so `ExecStartPost=` is what drives it. Never send a notify where
+a ping is meant: pinging from the failure path makes a broken host look alive.
+
+**healthcheck** — a dead-man's switch in kestrel, one per nightly job. Jobs
+ping on success. Silence raises the alarm. den holds the URL, never the token,
+in `/etc/den/healthcheck/<check>`.
+_Avoid:_ heartbeat, monitor.
 
 **reconcile** — the daily timer that re-runs `apply` to catch drift. Its job
 is detection, not speed.

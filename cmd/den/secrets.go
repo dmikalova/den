@@ -50,12 +50,12 @@ func secretsHost(ctx context.Context, args []string, stdout, stderr io.Writer) e
 }
 
 type secretsFlags struct {
-	secret  *string
-	dir     *string
-	cache   *string
-	key     *string
-	webhook *string
-	ping    *string
+	secret       *string
+	dir          *string
+	cache        *string
+	key          *string
+	webhook      *string
+	healthchecks *string
 }
 
 func addSecretsFlags(fs *flag.FlagSet) secretsFlags {
@@ -73,10 +73,10 @@ func addSecretsFlags(fs *flag.FlagSet) secretsFlags {
 			defaultWebhookFile,
 			"durable copy of the Discord webhook for the failure notifier",
 		),
-		ping: fs.String(
-			"ping-file",
-			defaultPingFile,
-			"durable copy of the healthcheck URL for the dead-man's switch",
+		healthchecks: fs.String(
+			"healthcheck-dir",
+			defaultHealthcheckDir,
+			"durable copies of the healthcheck URLs, one file per check",
 		),
 	}
 }
@@ -105,7 +105,7 @@ func secretsFetch(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := writeDurable(*f.webhook, data["DISCORD_WEBHOOK_URL"]); err != nil {
 		return err
 	}
-	if err := writeDurable(*f.ping, data["HEALTHCHECK_URL"]); err != nil {
+	if err := writeHealthchecks(*f.healthchecks, data); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(stdout, "wrote %d secrets to %s\n", len(data), *f.dir); err != nil {
@@ -219,11 +219,10 @@ func explode(dir string, data map[string]string) error {
 	return nil
 }
 
-// writeDurable keeps a copy of one value outside /run, for the two units that
-// must not depend on this one: a notifier that waits on the secret fetch
-// cannot report the secret fetch failing, and a dead-man's-switch ping that
-// waits on it cannot report the host failing to boot. /etc is inside LUKS, so
-// a stolen disk still yields nothing.
+// writeDurable keeps a copy of one value outside /run, for the units that must
+// not depend on this one: a notifier that waits on the secret fetch cannot
+// report the secret fetch failing. /etc is inside LUKS, so a stolen disk still
+// yields nothing.
 //
 // An absent key is not an error. den runs before every value exists.
 func writeDurable(path, value string) error {
@@ -236,6 +235,59 @@ func writeDurable(path, value string) error {
 	if err := os.WriteFile(path, []byte(value+"\n"), 0o400); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
+	return nil
+}
+
+// healthcheckPrefix marks the keys of den's runtime secret that are ping URLs.
+// The rest of the key is the check name, so adding a check to kestrel is all
+// it takes for den to start writing its URL.
+const healthcheckPrefix = "HEALTHCHECK_URL_"
+
+// writeHealthchecks keeps one durable ping URL per check, named after the job
+// that pings it. The sweep matters more here than in explode: a file left
+// behind is a check nobody declares any more, and den would go on feeding a
+// switch kestrel has already forgotten.
+func writeHealthchecks(dir string, data map[string]string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("making %s: %w", dir, err)
+	}
+
+	wanted := make(map[string]bool)
+
+	for key, value := range data {
+		name, ok := strings.CutPrefix(key, healthcheckPrefix)
+		if !ok || value == "" {
+			continue
+		}
+
+		name = strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+		if strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+			return fmt.Errorf("check name %q is not a usable file name", name)
+		}
+
+		wanted[name] = true
+		path := filepath.Join(dir, name)
+
+		if err := os.WriteFile(path, []byte(value+"\n"), 0o400); err != nil {
+			return fmt.Errorf("writing %s: %w", path, err)
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", dir, err)
+	}
+
+	for _, e := range entries {
+		if wanted[e.Name()] {
+			continue
+		}
+
+		if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+			return fmt.Errorf("removing the stale healthcheck %s: %w", e.Name(), err)
+		}
+	}
+
 	return nil
 }
 
