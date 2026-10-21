@@ -75,6 +75,10 @@ func TestPatchGrubFailsOnUnknownLayout(t *testing.T) {
 	}
 }
 
+// testHostKey is shaped like an OpenSSH private key and is not one. Split so a
+// secret scanner does not read the test as a leaked key.
+const testHostKey = "-----BEGIN OPENSSH " + "PRIVATE KEY-----\nnot-a-key\n-----END OPENSSH " + "PRIVATE KEY-----\n"
+
 func TestSeedValidate(t *testing.T) {
 	good := Seed{
 		Hostname:       "den",
@@ -82,6 +86,7 @@ func TestSeedValidate(t *testing.T) {
 		PasswordHash:   "$6$rounds=4096$salt$hash",
 		AuthorizedKeys: []string{"ssh-ed25519 AAAAC3Nz key@host"},
 		LUKSPassphrase: "correct horse battery staple",
+		HostKey:        testHostKey,
 	}
 
 	cases := []struct {
@@ -107,6 +112,12 @@ func TestSeedValidate(t *testing.T) {
 		{
 			"short luks passphrase",
 			func() Seed { s := good; s.LUKSPassphrase = "short"; return s }(),
+			false,
+		},
+		{"no host key", func() Seed { s := good; s.HostKey = ""; return s }(), false},
+		{
+			"public host key",
+			func() Seed { s := good; s.HostKey = "ssh-ed25519 AAAAC3Nz root@den"; return s }(),
 			false,
 		},
 	}
@@ -147,11 +158,15 @@ func TestUserDataPinsOneDisk(t *testing.T) {
 		PasswordHash:   "$6$rounds=4096$salt$hash",
 		AuthorizedKeys: []string{"ssh-ed25519 AAAAC3Nz key@host"},
 		LUKSPassphrase: "correct horse battery staple",
+		HostKey:        testHostKey,
 	}
 
 	out, err := s.UserData()
 	if err != nil {
 		t.Fatalf("UserData: %v", err)
+	}
+	if bytes.Contains(out, []byte("PRIVATE KEY")) {
+		t.Errorf("the host key leaked into user-data, which the installer logs:\n%s", out)
 	}
 	if !bytes.Contains(out, []byte("/dev/nvme0n1")) {
 		t.Errorf("install is not pinned to the NVMe:\n%s", out)

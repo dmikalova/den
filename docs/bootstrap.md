@@ -22,11 +22,9 @@ Host den
   User dmikalova
 ```
 
-A reinstall gives den a new host key. Clear the old one first:
-
-```bash
-ssh-keygen -R den
-```
+A reinstall keeps den's host key, because `den usb build` puts the same one on
+every install. Do not clear it from `known_hosts`: a changed key means the
+install went wrong, not that it is new.
 
 ## First pass
 

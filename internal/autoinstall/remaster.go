@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // grubPath is where the live installer's GRUB configuration sits inside the
@@ -16,6 +17,10 @@ const grubPath = "/boot/grub/grub.cfg"
 // Subiquity redacts the passphrase from the copy of the seed it leaves on the
 // installed system, so the TPM enrollment cannot read it back from there.
 const KeyFile = "luks.key"
+
+// HostKeyFile holds den's SSH host key inside the seed directory, kept out of
+// user-data so the installer never copies it into its logs.
+const HostKeyFile = "ssh_host_ed25519_key"
 
 // Remaster writes a copy of the source ISO that carries the seed and boots
 // straight into the install.
@@ -133,6 +138,11 @@ func writeSeed(work string, seed Seed) (string, error) {
 		[]byte(seed.LUKSPassphrase),
 		0o600,
 	); err != nil {
+		return "", err
+	}
+	// OpenSSH refuses a key file without its final newline.
+	hostKey := strings.TrimSpace(seed.HostKey) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, HostKeyFile), []byte(hostKey), 0o600); err != nil {
 		return "", err
 	}
 	return dir, nil

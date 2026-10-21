@@ -17,6 +17,7 @@ import (
 type Install struct {
 	Password       string `json:"PASSWORD"`
 	LUKSPassphrase string `json:"LUKS_PASSPHRASE"`
+	HostKey        string `json:"SSH_HOST_ED25519_KEY"`
 }
 
 // Access returns the newest version of a GCP Secret Manager secret, using

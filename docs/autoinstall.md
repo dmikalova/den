@@ -219,8 +219,11 @@ Enter it once. The TPM takes over from the second boot.
    `nmap -sn 192.168.0.0/24`. The router's DHCP lease table also shows the
    hostname the host claimed.
 
-   SSH asks you to accept a host key the first time. Read the real
-   fingerprint off the console first and compare:
+   Every install carries the same host key, `SSH_HOST_ED25519_KEY` from
+   `den-install`, so SSH does not ask about it: the fingerprint is the one
+   `known_hosts` already trusts, `SHA256:iSvJqB6Q5lDwLQ30xz9bZhsKbvoYJA38rS5jz3jurcU`.
+   If SSH warns that the host key changed, the install did not take the key.
+   Stop and find out why before you accept anything:
 
    ```sh
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
