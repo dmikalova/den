@@ -219,15 +219,19 @@ Enter it once. The TPM takes over from the second boot.
    `nmap -sn 192.168.0.0/24`. The router's DHCP lease table also shows the
    hostname the host claimed.
 
-   SSH asks you to accept a host key the first time. Read the real
-   fingerprint off the console first and compare:
+   Every install carries the same host key, `SSH_HOST_ED25519_KEY` from
+   `den-install`, so SSH does not ask about it: the fingerprint is the one
+   `known_hosts` already trusts, `SHA256:iSvJqB6Q5lDwLQ30xz9bZhsKbvoYJA38rS5jz3jurcU`.
+   If SSH warns that the host key changed, the install did not take the key.
+   Stop and find out why before you accept anything:
 
    ```sh
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
    ```
 
-   Confirm the install touched one disk only. The four data drives must still
-   be empty:
+   Confirm the install touched one disk only. The four data drives must be
+   exactly as they were: empty on a first install, still holding their
+   filesystems on a reinstall:
 
    ```sh
    lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
@@ -295,18 +299,19 @@ Enter it once. The TPM takes over from the second boot.
    ```
 
    `den apply` installs Tailscale through mgmt and joins the tailnet itself,
-   with the auth key from `tailscale-den` and `tag:den`. Do not run
-   `tailscale up` by hand first. The binary is not on the host until this step
-   installs it.
+   with the OAuth client from `tailscale-den` and `tag:den`. On a reinstall it
+   first deletes the old, disconnected `den` node. Do not run `tailscale up` by
+   hand first. The binary is not on the host until this step installs it.
 
    `den apply` also reads den's service account key out of `den-install` and
    seals it to the TPM, so den can fetch its own secrets from then on. That
    key is the only credential ever delivered to den.
 
-4. Reboot for the NVIDIA driver. mgmt installs it but does not reboot, and the
-   GPU container stack stays broken until the module loads.
+   It then reboots for the NVIDIA driver, waits for den to come back, and
+   converges the user layer last, because the GPU container stack stays broken
+   until the module loads.
 
-5. Confirm the host can reach you:
+4. Confirm the host can reach you:
 
    ```sh
    ssh den sudo den notify --title bootstrap "den is up"
@@ -316,7 +321,7 @@ Enter it once. The TPM takes over from the second boot.
    when something breaks, so fix it before you go on. `den notify` needs root
    because `/etc/den` is `0700`.
 
-6. Run the smoke checks:
+5. Run the smoke checks:
 
    ```sh
    den check

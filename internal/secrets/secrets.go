@@ -17,6 +17,7 @@ import (
 type Install struct {
 	Password       string `json:"PASSWORD"`
 	LUKSPassphrase string `json:"LUKS_PASSPHRASE"`
+	HostKey        string `json:"SSH_HOST_ED25519_KEY"`
 }
 
 // Access returns the newest version of a GCP Secret Manager secret, using
@@ -45,18 +46,27 @@ func Access(ctx context.Context, project, name string) (string, error) {
 // a JSON object rather than a bare value, so that one grant covers everything
 // a given reader needs; the key names match the SOPS file they came from.
 func AccessKey(ctx context.Context, project, name, key string) (string, error) {
-	raw, err := Access(ctx, project, name)
+	data, err := AccessJSON(ctx, project, name)
 	if err != nil {
 		return "", err
-	}
-
-	var data map[string]string
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return "", fmt.Errorf("secret %s is not a JSON object: %w", name, err)
 	}
 	value, ok := data[key]
 	if !ok {
 		return "", fmt.Errorf("secret %s has no %s", name, key)
 	}
 	return value, nil
+}
+
+// AccessJSON returns every key of a JSON secret.
+func AccessJSON(ctx context.Context, project, name string) (map[string]string, error) {
+	raw, err := Access(ctx, project, name)
+	if err != nil {
+		return nil, err
+	}
+
+	var data map[string]string
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		return nil, fmt.Errorf("secret %s is not a JSON object: %w", name, err)
+	}
+	return data, nil
 }

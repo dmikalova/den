@@ -22,6 +22,7 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | `internal/progress`    | Progress reporting for the long-running commands         |
 | `internal/remote`      | Running a script on den over ssh                         |
 | `internal/secrets`     | The key names den reads out of the GCP secrets           |
+| `internal/tailnet`     | Clearing a reinstall's stale node from the tailnet       |
 | `internal/usbdisk`     | Finding a removable disk and writing an image to it      |
 
 ## Rules

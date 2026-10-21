@@ -1,0 +1,16 @@
+{
+  // Merged after the project-standards remote, which is why this lives here and
+  // not in lefthook.jsonc: a remote overrides the main config. Interim: once
+  // den's project-standards knows tools.lefthook, this moves into
+  // mklv.config.json and a generated lefthook-local.yaml replaces this file.
+  "pre-commit": {
+    "commands": {
+      // mgmt runs these on den as exec bodies, so they have to be shell.
+      "no-shell-scripts": {
+        "glob": "*.sh",
+        "exclude": ["mgmt/**/*.sh", "scripts/*.sh"],
+        "run": "printf '%s\\n' {files}; echo 'Error: Shell scripts (.sh) are not allowed. Use TypeScript instead.'; exit 1"
+      }
+    }
+  }
+}

@@ -71,6 +71,11 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 			"",
 			"file holding the LUKS passphrase; overrides the secret",
 		)
+		hostKeyPath = fs.String(
+			"host-key-file",
+			"",
+			"file holding den's SSH ed25519 host key; overrides the secret",
+		)
 		timeout = fs.Int("menu-timeout", 1, "seconds GRUB waits before it starts the install")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -81,7 +86,12 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	install, err := loadInstallSecrets(ctx, *project, *secret, *passPath, *luksPath)
+	install, err := loadInstallSecrets(
+		ctx,
+		*project,
+		*secret,
+		installFiles{password: *passPath, luks: *luksPath, hostKey: *hostKeyPath},
+	)
 	if err != nil {
 		return err
 	}
@@ -95,6 +105,7 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 		PasswordHash:   hash,
 		AuthorizedKeys: keys,
 		LUKSPassphrase: install.LUKSPassphrase,
+		HostKey:        install.HostKey,
 	}
 	if err := seed.Validate(); err != nil {
 		return err
@@ -236,33 +247,40 @@ func readKey(path string) ([]string, error) {
 	return keys, scan.Err()
 }
 
+// installFiles are the local files that stand in for keys of the install
+// secret. An empty path means read that key from the secret.
+type installFiles struct {
+	password, luks, hostKey string
+}
+
 // loadInstallSecrets prefers the explicit files, and only reaches for the
 // secret to fill in what they do not supply. The files exist so a rebuild is
 // possible when GCP is unreachable.
 func loadInstallSecrets(
 	ctx context.Context,
-	project, secret, passPath, luksPath string,
+	project, secret string,
+	files installFiles,
 ) (secrets.Install, error) {
 	var install secrets.Install
-	var err error
-
-	if passPath == "" {
-		if install.Password, err = secrets.AccessKey(ctx, project, secret, "PASSWORD"); err != nil {
-			return install, err
+	for _, v := range []struct {
+		path string
+		key  string
+		into *string
+	}{
+		{files.password, "PASSWORD", &install.Password},
+		{files.luks, "LUKS_PASSPHRASE", &install.LUKSPassphrase},
+		{files.hostKey, "SSH_HOST_ED25519_KEY", &install.HostKey},
+	} {
+		var err error
+		if v.path == "" {
+			*v.into, err = secrets.AccessKey(ctx, project, secret, v.key)
+		} else {
+			*v.into, err = readTrimmed(v.path)
 		}
-	} else if install.Password, err = readTrimmed(passPath); err != nil {
-		return install, err
-	}
-
-	if luksPath == "" {
-		install.LUKSPassphrase, err = secrets.AccessKey(ctx, project, secret, "LUKS_PASSPHRASE")
 		if err != nil {
 			return install, err
 		}
-	} else if install.LUKSPassphrase, err = readTrimmed(luksPath); err != nil {
-		return install, err
 	}
-
 	return install, nil
 }
 

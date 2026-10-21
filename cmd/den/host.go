@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -13,20 +14,26 @@ import (
 	"github.com/dmikalova/den/internal/bootstrap"
 	"github.com/dmikalova/den/internal/remote"
 	"github.com/dmikalova/den/internal/secrets"
+	"github.com/dmikalova/den/internal/tailnet"
 )
 
 // defaultHost is the ssh destination. Put a Host block in ~/.ssh/config so a
 // reinstall only changes one file.
 const defaultHost = "den"
 
-// The tailnet enrolment key lives in GCP Secret Manager, written there by the
+// den's tailnet OAuth client lives in GCP Secret Manager, written there by the
 // infrastructure repo's tailscale stack. The secret is a JSON object, so the
-// key inside it has to be named too.
+// keys inside it have to be named too.
 const (
-	defaultProject       = "mklv-infrastructure"
-	defaultTailscaleKey  = "tailscale-den"
-	tailscaleAuthkeyName = "AUTHKEY"
+	defaultProject        = "mklv-infrastructure"
+	defaultTailscaleKey   = "tailscale-den"
+	tailscaleClientID     = "CLIENT_ID"
+	tailscaleClientSecret = "CLIENT_SECRET"
 )
+
+// rebootTimeout bounds the wait for den to come back. Past it, den is most
+// likely sitting at a LUKS prompt because the TPM refused to unseal.
+const rebootTimeout = 15 * time.Minute
 
 // den-install holds what builds the machine. It carries no IAM binding at
 // all, so only project admins read it, which is what keeps den out of it.
@@ -38,17 +45,18 @@ const (
 
 // hostFlags are the flags den bootstrap and den apply share.
 type hostFlags struct {
-	host    *string
-	user    *string
-	repo    *string
-	dir     *string
-	mgmt    *string
-	project *string
-	install *string
-	tsKey   *string
-	tsTag   *string
-	dryRun  *bool
-	noop    *bool
+	host     *string
+	user     *string
+	repo     *string
+	dir      *string
+	mgmt     *string
+	project  *string
+	install  *string
+	tsKey    *string
+	tsTag    *string
+	dryRun   *bool
+	noop     *bool
+	noReboot *bool
 }
 
 func addHostFlags(fs *flag.FlagSet) hostFlags {
@@ -68,6 +76,11 @@ func addHostFlags(fs *flag.FlagSet) hostFlags {
 		),
 		dryRun: fs.Bool("dry-run", false, "print every script instead of running it"),
 		noop:   fs.Bool("noop", false, "run mgmt but report changes instead of making them"),
+		noReboot: fs.Bool(
+			"no-reboot",
+			false,
+			"do not reboot den when a package or the GPU driver needs it",
+		),
 		project: fs.String(
 			"gcp-project",
 			defaultProject,
@@ -81,7 +94,7 @@ func addHostFlags(fs *flag.FlagSet) hostFlags {
 		tsKey: fs.String(
 			"tailscale-secret",
 			defaultTailscaleKey,
-			"Secret Manager secret holding the tailnet key",
+			"Secret Manager secret holding den's tailnet OAuth client",
 		),
 		tsTag: fs.String(
 			"tailscale-tag",
@@ -108,41 +121,198 @@ func (f hostFlags) split(stdout, stderr io.Writer) (remote.Host, bootstrap.Optio
 	}
 }
 
-// tailnetKey fetches den's enrolment key. A missing or unreadable secret is
+// tailnetAuth is den's tailnet OAuth client. The secret enrols den, and the
+// pair together let den apply clear the node a reinstall left behind.
+type tailnetAuth struct {
+	id, secret string
+}
+
+// authKey is the client secret in the form tailscale up accepts. An OAuth
+// secret mints a key per use, and these attributes say which kind.
+func (a tailnetAuth) authKey() string {
+	if a.secret == "" {
+		return ""
+	}
+	return a.secret + "?ephemeral=false&preauthorized=true"
+}
+
+// tailnetAuth fetches den's OAuth client. A missing or unreadable secret is
 // not fatal: converging matters more than enrolling, and the join step guards
 // itself anyway. Dry runs never reach gcloud, because the script they print
-// would contain the key.
+// would contain the secret.
 //
 // gcloud can stall here while it refreshes credentials, so this announces
 // itself first rather than leaving the run looking hung.
-func (f hostFlags) tailnetKey(ctx context.Context, dryRun bool, stdout, stderr io.Writer) string {
+func (f hostFlags) tailnetAuth(
+	ctx context.Context,
+	dryRun bool,
+	stdout, stderr io.Writer,
+) tailnetAuth {
 	if dryRun {
-		return "REDACTED"
+		return tailnetAuth{id: "REDACTED", secret: "REDACTED"}
 	}
 	if _, err := fmt.Fprintf(stdout, "reading %s from %s\n", *f.tsKey, *f.project); err != nil {
-		return ""
+		return tailnetAuth{}
 	}
 	// Bounded because the join is optional and gcloud can block for a long
 	// time on a credential or network problem. Converging still matters.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	start := time.Now()
-	key, err := secrets.AccessKey(ctx, *f.project, *f.tsKey, tailscaleAuthkeyName)
+	data, err := secrets.AccessJSON(ctx, *f.project, *f.tsKey)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = fmt.Errorf("gcloud did not answer within 30s: %w", err)
 		}
 		_, _ = fmt.Fprintf(stderr, "skipping the tailnet join: %v\n", err)
-		return ""
+		return tailnetAuth{}
+	}
+	auth := tailnetAuth{id: data[tailscaleClientID], secret: data[tailscaleClientSecret]}
+	if auth.id == "" || auth.secret == "" {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"skipping the tailnet join: %s lacks %s or %s\n",
+			*f.tsKey,
+			tailscaleClientID,
+			tailscaleClientSecret,
+		)
+		return tailnetAuth{}
 	}
 	if _, err := fmt.Fprintf(
 		stdout,
 		"done in %s\n",
 		time.Since(start).Round(time.Second),
 	); err != nil {
-		return ""
+		return tailnetAuth{}
 	}
-	return key
+	return auth
+}
+
+// enrol joins den to the tailnet unless it is already on it. A tailscaled with
+// no node identity means a fresh install, and the previous install's node is
+// still registered under den, so it is removed first or this one enrols as
+// den-1 and every name pointing at den reaches the dead node.
+func (f hostFlags) enrol(
+	ctx context.Context,
+	h remote.Host,
+	o bootstrap.Options,
+	auth tailnetAuth,
+	stdout, stderr io.Writer,
+) error {
+	if auth.secret == "" || o.Noop {
+		return nil
+	}
+	join := []bootstrap.Step{bootstrap.JoinTailnet(o)}
+	if h.DryRun {
+		return bootstrap.Run(ctx, h, join, stdout)
+	}
+
+	raw, err := h.Capture(ctx, bootstrap.TailnetState)
+	if err != nil {
+		return fmt.Errorf("reading tailscaled's state: %w", err)
+	}
+	var state struct{ BackendState string }
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return fmt.Errorf("reading tailscaled's state: %w", err)
+	}
+	switch state.BackendState {
+	case "Running":
+		_, err := fmt.Fprintln(stdout, "\nalready on the tailnet")
+		return err
+	case "":
+		_, err := fmt.Fprintln(stdout, "\ntailscale is not installed yet, skipping the join")
+		return err
+	case "NeedsLogin", "NoState":
+		f.removeStaleNode(ctx, h, auth, stdout, stderr)
+	}
+	return bootstrap.Run(ctx, h, join, stdout)
+}
+
+// removeStaleNode deletes the disconnected namesakes of this host. A failure
+// only warns: the join still works, it just lands as den-1.
+func (f hostFlags) removeStaleNode(
+	ctx context.Context,
+	h remote.Host,
+	auth tailnetAuth,
+	stdout, stderr io.Writer,
+) {
+	warn := func(err error) {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"could not clear the old tailnet node, den may enrol as den-1: %v\n",
+			err,
+		)
+	}
+	hostname, err := h.Capture(ctx, "hostname")
+	if err != nil {
+		warn(err)
+		return
+	}
+	client, err := tailnet.New(ctx, tailnet.DefaultBaseURL, auth.id, auth.secret)
+	if err != nil {
+		warn(err)
+		return
+	}
+	devices, err := client.Devices(ctx)
+	if err != nil {
+		warn(err)
+		return
+	}
+	for _, d := range tailnet.Stale(devices, hostname, *f.tsTag) {
+		_, _ = fmt.Fprintf(stdout, "removing the stale tailnet node %s (%s)\n", d.Name, d.NodeID)
+		if err := client.Delete(ctx, d.NodeID); err != nil {
+			warn(err)
+		}
+	}
+}
+
+// rebootIfNeeded reboots den and waits for it to come back on a new boot. It
+// lives here rather than in mgmt because mgmt also runs from the nightly
+// reconcile timer, and a reboot nobody is watching is the one the decision
+// log rejects. den apply always has an operator.
+func (f hostFlags) rebootIfNeeded(
+	ctx context.Context,
+	h remote.Host,
+	o bootstrap.Options,
+	stdout io.Writer,
+) error {
+	if h.DryRun || o.Noop || *f.noReboot {
+		return nil
+	}
+	reason, err := h.Capture(ctx, bootstrap.RebootReason)
+	if err != nil {
+		return fmt.Errorf("checking whether den needs a reboot: %w", err)
+	}
+	if reason == "" {
+		return nil
+	}
+	before, err := h.Capture(ctx, bootstrap.BootID)
+	if err != nil {
+		return fmt.Errorf("reading the boot id: %w", err)
+	}
+	if _, err := fmt.Fprintf(stdout, "\nrebooting den: %s\n", reason); err != nil {
+		return err
+	}
+	// The connection drops mid-command, so its error says nothing.
+	_ = h.Run(ctx, "sudo systemctl reboot\n")
+
+	wait, cancel := context.WithTimeout(ctx, rebootTimeout)
+	defer cancel()
+	start := time.Now()
+	for {
+		if err := h.Wait(wait); err != nil {
+			return fmt.Errorf("den did not come back from the reboot: %w", err)
+		}
+		if now, err := h.Capture(wait, bootstrap.BootID); err == nil && now != "" && now != before {
+			_, err := fmt.Fprintf(stdout, "back in %s\n", time.Since(start).Round(time.Second))
+			return err
+		}
+		select {
+		case <-wait.Done():
+			return fmt.Errorf("den did not come back from the reboot: %w", wait.Err())
+		case <-time.After(5 * time.Second):
+		}
+	}
 }
 
 // mode names a run that is not a real one, so a report-only run cannot be
@@ -248,13 +418,23 @@ func applyHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	); err != nil {
 		return err
 	}
-	o.TailscaleKey = f.tailnetKey(ctx, h.DryRun, stdout, stderr)
+	auth := f.tailnetAuth(ctx, h.DryRun, stdout, stderr)
+	o.TailscaleKey = auth.authKey()
 
-	if err := bootstrap.Run(ctx, h, bootstrap.Apply(o), stdout); err != nil {
+	if err := bootstrap.Run(ctx, h, bootstrap.ApplyRoot(o), stdout); err != nil {
+		return err
+	}
+	if err := f.enrol(ctx, h, o, auth, stdout, stderr); err != nil {
 		return err
 	}
 	// After the converge, because this needs the den binary mgmt installs.
 	f.sealKey(ctx, h, stdout, stderr)
-	_, err := fmt.Fprintln(stdout, "\napplied")
+	if err := f.rebootIfNeeded(ctx, h, o, stdout); err != nil {
+		return err
+	}
+	if err := bootstrap.Run(ctx, h, bootstrap.ApplyUser(o), stdout); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(stdout, "\napplied. Next:\n  den check --host %s\n", h.Addr)
 	return err
 }

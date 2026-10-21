@@ -28,6 +28,10 @@ type Seed struct {
 	// LUKSPassphrase unlocks the root volume. curtin can only take it in
 	// plaintext, so it reaches the installed system in clear.
 	LUKSPassphrase string
+
+	// HostKey is den's OpenSSH ed25519 host key. Every install gets the same
+	// one, so known_hosts never changes across a reinstall.
+	HostKey string
 }
 
 // cryptHash matches a crypt(3) hash, which is what identity.password must be.
@@ -51,6 +55,8 @@ func (s Seed) Validate() error {
 		return fmt.Errorf("no authorized keys: without one you cannot reach the installed host")
 	case len(s.LUKSPassphrase) < 16:
 		return fmt.Errorf("luks passphrase is shorter than 16 characters")
+	case !strings.HasPrefix(s.HostKey, "-----BEGIN OPENSSH PRIVATE KEY-----"):
+		return fmt.Errorf("host key is not an OpenSSH private key")
 	}
 	for _, k := range s.AuthorizedKeys {
 		if !strings.HasPrefix(k, "ssh-") && !strings.HasPrefix(k, "ecdsa-") {
@@ -77,6 +83,9 @@ func (s Seed) UserData() ([]byte, error) {
 			return string(bytes.TrimSpace(out))
 		},
 		"seedKey": func() string { return "/cdrom/" + SeedDir + "/" + KeyFile },
+		"seedHostKey": func() string {
+			return "/cdrom/" + SeedDir + "/" + HostKeyFile
+		},
 	}
 	t, err := template.New("user-data.tmpl").Funcs(funcs).ParseFS(templates, "user-data.tmpl")
 	if err != nil {
