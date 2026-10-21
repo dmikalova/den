@@ -1,13 +1,13 @@
 # Bootstrap
 
 Two passes take den from a finished install to a configured host. They are
-separate because the first pass reboots and needs a human at the keyboard for
-sudo, and the second pass is safe to repeat forever.
+separate because the first pass only puts mgmt on the host, and the second pass
+is safe to repeat forever.
 
-| Pass            | What it does                              | Repeatable |
-| --------------- | ----------------------------------------- | ---------- |
-| `den bootstrap` | Patch, install mgmt and tailscale, reboot | Once       |
-| `den apply`     | Fetch the config repo and converge it     | Always     |
+| Pass            | What it does                                             | Repeatable |
+| --------------- | -------------------------------------------------------- | ---------- |
+| `den bootstrap` | Install base packages, mgmt and your terminfo            | Once       |
+| `den apply`     | Converge the config repo, join the tailnet, seal the key | Always     |
 
 Both shell out to the `ssh` binary. Your `~/.ssh/config`, your agent and your
 `known_hosts` apply, and den never does its own host key checking.
@@ -48,7 +48,7 @@ reads the description from whatever `$TERM` names locally, so this works for
 any terminal and carries no hardcoded list.
 
 Tailscale is not installed yet. mgmt installs it during `den apply`, and
-`den apply` then enrols the node itself with the auth key from the
+`den apply` then enrols the node itself with the OAuth client from the
 `tailscale-den` secret and `tag:den`. Do not run `tailscale up` by hand here:
 the binary is not on the host.
 
@@ -62,9 +62,27 @@ CI in is written against the tag rather than against one machine.
 den apply
 ```
 
-It clones `/srv/den-config` from GitHub, then converges `mgmt/main.mcl` under
-sudo. Run it again whenever the config repo moves. The `reconcile` timer on
-den does the same thing on a schedule.
+It runs these in order:
+
+1. Clone or pull `/srv/den-config` from GitHub.
+2. Converge `mgmt/main.mcl`, the root layer.
+3. Join the tailnet, if den is not on it yet.
+4. Seal den's service account key to the TPM.
+5. Reboot, if a package asked for one or the NVIDIA module is not loaded,
+   and wait for den to come back. `--no-reboot` skips this.
+6. Converge `mgmt/user/main.mcl`, the user layer. It runs last because its
+   GPU quadlet needs the CDI spec that only exists after the module loads.
+
+Run it again whenever the config repo moves. The `reconcile` timer on den
+converges both layers on a schedule, but never reboots.
+
+The root layer converges as the transient unit `den-apply-root`, not as a
+child of the ssh session, and output streams back from the journal. If the
+session drops, the converge carries on: reattach with
+`journalctl -fu den-apply-root`. Every 30 seconds it also writes what apt,
+dpkg, PackageKit and unattended-upgrades are doing, and who holds the dpkg
+locks, to `/var/log/den/apply-<time>.watch`. Read that file first if the
+package step hangs.
 
 ## Letting CI reach den
 
@@ -73,46 +91,24 @@ cannot push to it. Instead the runner joins the tailnet for the length of a
 job and asks den to reconcile early. Delivery stays a pull either way; the
 workflow only shortens the wait.
 
-Do this once, in the Tailscale admin console:
+The tailnet policy, CI's federated identity and den's OAuth client all live in
+the infrastructure repo, in `tailscale/tailnet`. The policy declares `tag:ci`
+and `tag:den`, lets `tag:ci` reach `tag:den` over SSH as root, and nothing
+else. Change it there, not in the admin console.
 
-1. Declare the tags under Access controls, or nothing may claim them:
+den's OAuth client never expires, so an enrolment months from now still works.
+Its secret is the auth key, and the client is limited to `tag:den`.
 
-   ```json
-   "tagOwners": {
-     "tag:ci":     ["autogroup:admin"],
-     "tag:server": ["autogroup:admin"]
-   }
-   ```
+## Reinstalling
 
-2. Let CI open an SSH session, and keep your own access separate:
+The new install is a new tailnet node. Its node key was sealed to the old
+root and is gone with it. `den apply` sees a tailscaled with no identity,
+deletes the disconnected `tag:den` node with the same hostname, then joins, so
+the new install takes the name `den` rather than `den-1`.
 
-   ```json
-   "ssh": [
-     {
-       "action": "accept",
-       "src":    ["tag:ci"],
-       "dst":    ["tag:server"],
-       "users":  ["root"]
-     },
-     {
-       "action": "check",
-       "src":    ["autogroup:member"],
-       "dst":    ["tag:server"],
-       "users":  ["autogroup:nonroot", "root"]
-     }
-   ]
-   ```
-
-   `accept` is unavoidable for CI, which has no browser to answer a `check`
-   with. Narrow it by keeping `tag:ci` to this one destination.
-
-3. Generate an OAuth client under Settings, with the `auth_keys` write scope
-   and the `tag:ci` tag. The secret is shown once. Put the two halves in the
-   repository as `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`.
-
-An OAuth client is used rather than an auth key because auth keys expire after
-at most 90 days, and a credential that rots silently fails long after anyone
-remembers it exists. The client mints a short lived key per job instead.
+After `den apply` joins, apply `tailscale/tailnet` again, then the DNS stack
+that reads its den address outputs, so `*.den.mklv.tech` resolves to the new
+tailnet address.
 
 ## Seeing what would happen
 

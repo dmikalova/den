@@ -6,7 +6,7 @@
 # Bump `version` here and the matching sentinel in main.mcl together.
 set -euo pipefail
 
-version=1.9.0
+version=2.0.0
 base="https://github.com/dmikalova/den/releases/download/v${version}"
 
 case "$(uname -m)" in

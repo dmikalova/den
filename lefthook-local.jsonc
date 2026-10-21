@@ -1,0 +1,12 @@
+{
+  // Merged after the project-standards remote, which is why this lives here and
+  // not in lefthook.jsonc: a remote overrides the main config.
+  "pre-commit": {
+    "commands": {
+      // mgmt runs these on den as exec bodies, so they have to be shell.
+      "no-shell-scripts": {
+        "run": "if git ls-files '*.sh' ':!:mgmt/files/scripts/*.sh' ':!:mgmt/user/files/scripts/*.sh' ':!:scripts/*.sh' | grep .; then\n  echo 'Error: Shell scripts (.sh) are not allowed. Use TypeScript instead.'\n  exit 1\nfi"
+      }
+    }
+  }
+}

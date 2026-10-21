@@ -94,10 +94,13 @@ file "/etc/sysctl.d/99-den-swap.conf" {
 	mode => "0644",
 }
 
+# Ordered behind the sentinel directory so the reload below can touch its own.
 file "/etc/sysctl.d/99-den-rootless.conf" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/sysctl.d/99-den-rootless.conf"),
 	mode => "0644",
+
+	Depend => File["/var/lib/den/"],
 }
 
 # sysctl.d is read at boot, so a new file changes nothing on a running system.
@@ -149,6 +152,8 @@ exec "locales-v1" {
 	cmd => "locale-gen en_US.UTF-8 en_DK.UTF-8 && update-locale LC_TIME=en_DK.UTF-8 && touch /var/lib/den/locales-v1",
 	shell => "/bin/bash",
 	creates => "/var/lib/den/locales-v1",
+
+	Depend => File["/var/lib/den/"],
 }
 
 # The install writes this too, because den cannot reach mgmt without it. mgmt
@@ -182,7 +187,7 @@ exec "btrfs-subvols-v2" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/btrfs-subvols-v2",
 
-	Depend => Pkg["rsync"],
+	Depend => File["/var/lib/den/"],
 }
 
 file "/etc/systemd/system/home.mount" {
@@ -287,26 +292,85 @@ exec "storage-mounts-v2" {
 	Depend => File["/etc/systemd/system/mnt-storage.mount"],
 }
 
-# Snapshots of /, /home and /srv/appdata. Must run after the mounts: each config
-# is created against a subvolume, and an unmounted /srv/appdata is just a
-# directory on @.
+# Snapshots of /, /home, /srv/appdata and the data disks. Must follow the
+# mounts: each config points at a subvolume, and an unmounted /srv/appdata is
+# just a directory on @.
 #
 # No grub-btrfs. It is not packaged for this release, so it would mean building
 # a bootloader generator from source, and /boot is a separate ext4 partition
 # here, so a snapshot entry would pair an old root with the current kernel
 # anyway. Rollback is a rescue-USB job: mount subvolid=5 and promote a snapshot.
 #
-# Nothing enables the snapper timers, because the package already does, and
-# create-config appends to SNAPPER_CONFIGS itself. Bump the sentinel to reapply
-# the tuning after editing the script.
-exec "snapper-configs-v2" {
-	Meta:retry => 3,
-	Meta:delay => 15000,
-	cmd => deploy.readfile("/files/scripts/snapper-configs.sh"),
-	shell => "/bin/bash",
-	creates => "/var/lib/den/snapper-configs-v2",
+# Nothing enables the snapper timers, because the package already does.
+#
+# The configs are files, not create-config output: create-config refuses a
+# .snapshots that already exists, and a reinstall keeps the data disks with
+# their snapshots. Chained after the mounts and so after the package set, or
+# dpkg finds its own conffile already written and stops at a prompt.
+file "/etc/snapper/configs/root" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/root"),
+	mode => "0640",
 
 	Depend => Exec["storage-mounts-v2"],
+}
+
+file "/etc/snapper/configs/home" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/home"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/root"],
+}
+
+file "/etc/snapper/configs/appdata" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/appdata"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/home"],
+}
+
+file "/etc/snapper/configs/disk1" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/disk1"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/appdata"],
+}
+
+file "/etc/snapper/configs/disk2" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/disk2"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/disk1"],
+}
+
+file "/etc/snapper/configs/disk3" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/disk3"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/disk2"],
+}
+
+file "/etc/default/snapper" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/default/snapper"),
+	mode => "0644",
+
+	Depend => File["/etc/snapper/configs/disk3"],
+}
+
+exec "snapper-subvols-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
+	cmd => deploy.readfile("/files/scripts/snapper-subvols.sh"),
+	shell => "/bin/bash",
+	creates => "/var/lib/den/snapper-subvols-v1",
+
+	Depend => File["/etc/default/snapper"],
 }
 
 # The canary that keeps the array non-empty.
@@ -325,7 +389,7 @@ file "/mnt/storage/README.txt" {
 	content => deploy.readfile("/files/mnt/storage/README.txt"),
 	mode => "0644",
 
-	Depend => Exec["snapper-configs-v2"],
+	Depend => Exec["snapper-subvols-v1"],
 }
 
 # Parity for the pooled drives. snapraid is not a backup and does not pretend
@@ -438,12 +502,19 @@ exec "tailscale-v1" {
 	cmd => deploy.readfile("/files/scripts/tailscale-install.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/tailscale-v1",
+
+	# Behind the package set, or its apt-get fights PackageKit for the dpkg lock.
+	Depend => File["/var/lib/den/"],
 }
 
+# After the package: the package ships this as a conffile, and finding ours
+# already there stops dpkg at a prompt nobody can answer.
 file "/etc/default/tailscaled" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/default/tailscaled"),
 	mode => "0644",
+
+	Depend => Exec["tailscale-v1"],
 }
 
 # tailscaled only reads its flags at start, so the file alone changes nothing.
@@ -475,6 +546,8 @@ exec "ufw-policy-v1" {
 	cmd => deploy.readfile("/files/scripts/ufw-policy.sh"),
 	shell => "/bin/bash",
 	creates => "/var/lib/den/ufw-policy-v1",
+
+	Depend => File["/var/lib/den/"],
 }
 
 # systemd already runs the upgrades, on apt-daily.timer and
@@ -519,16 +592,21 @@ file "/usr/local/bin/den-reconcile" {
 	mode => "0755",
 }
 
-file "/etc/systemd/system/den-reconcile.service" {
-	state => "exists",
-	content => deploy.readfile("/files/etc/systemd/system/den-reconcile.service"),
-	mode => "0644",
-}
-
 file "/etc/systemd/system/den-reconcile.timer" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/systemd/system/den-reconcile.timer"),
 	mode => "0644",
+
+	Depend => File["/var/lib/den/"],
+}
+
+# Chained behind the timer, so the enable below never finds it missing.
+file "/etc/systemd/system/den-reconcile.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-reconcile.service"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/den-reconcile.timer"],
 }
 
 # Not a svc resource: mgmt appends .service to the name, so it looks for
@@ -558,12 +636,12 @@ exec "den-reconcile-units-v2" {
 #
 # den itself does the reporting, so the binary has to be on the host. Bump the
 # version here and in den-install.sh together.
-exec "den-binary-v1.9.0" {
+exec "den-binary-v2.0.0" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/den-install.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-binary-v1.9.0",
+	creates => "/var/lib/den/den-binary-v2.0.0",
 
 	Depend => File["/var/lib/den/"],
 }
@@ -573,7 +651,7 @@ file "/etc/systemd/system/den-notify@.service" {
 	content => deploy.readfile("/files/etc/systemd/system/den-notify@.service"),
 	mode => "0644",
 
-	Depend => Exec["den-binary-v1.9.0"],
+	Depend => Exec["den-binary-v2.0.0"],
 }
 
 # No mode: see /var/lib/den/ above.

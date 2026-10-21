@@ -1,6 +1,6 @@
 // Package bootstrap brings a freshly installed den up to the point where mgmt
 // owns the host layer, and then runs mgmt. It is two passes on purpose: the
-// first pass patches and reboots, the second converges config and can be
+// first pass puts mgmt on the host, the second converges config and can be
 // repeated forever.
 package bootstrap
 
@@ -40,8 +40,9 @@ type Options struct {
 	// emits it. Empty skips the step.
 	Terminfo string
 
-	// TailscaleKey is a preauthorized tailnet key. Empty skips the join, which
-	// is what happens when the operator has no gcloud credentials.
+	// TailscaleKey is den's OAuth client secret, which tailscale up accepts as
+	// an auth key. Empty skips the join, which is what happens when the
+	// operator has no gcloud credentials.
 	TailscaleKey string
 	TailscaleTag string
 
@@ -83,14 +84,14 @@ func Bootstrap(o Options) []Step {
 	return steps
 }
 
-// Apply is the second pass: fetch the config repo and converge the host layer.
-// Running it again is how den reconciles by hand.
-func Apply(o Options) []Step {
+// ApplyRoot is the first half of the second pass: fetch the config repo and
+// converge the host layer. Running it again is how den reconciles by hand.
+func ApplyRoot(o Options) []Step {
 	noop := ""
 	if o.Noop {
 		noop = " --noop"
 	}
-	steps := []Step{
+	return []Step{
 		{
 			Name:   "make the config directory",
 			Root:   true,
@@ -105,19 +106,30 @@ func Apply(o Options) []Step {
 			Root:   true,
 			Script: fmt.Sprintf(runMgmt, o.ConfigDir, noop),
 		},
-		{
-			Name:   "converge the user layer",
-			Script: fmt.Sprintf(runUserMgmt, o.ConfigDir, noop),
-		},
 	}
-	if o.TailscaleKey != "" {
-		steps = append(steps, Step{
-			Name:   "join the tailnet",
-			Root:   true,
-			Script: fmt.Sprintf(joinTailnet, o.TailscaleTag, o.TailscaleKey),
-		})
+}
+
+// ApplyUser converges the user layer. It runs after the join, the key seal
+// and any reboot, because its quadlets need what those bring: the GPU's CDI
+// spec only exists once the NVIDIA module has loaded.
+func ApplyUser(o Options) []Step {
+	noop := ""
+	if o.Noop {
+		noop = " --noop"
 	}
-	return steps
+	return []Step{{
+		Name:   "converge the user layer",
+		Script: fmt.Sprintf(runUserMgmt, o.ConfigDir, noop),
+	}}
+}
+
+// JoinTailnet enrols den with its OAuth client secret.
+func JoinTailnet(o Options) Step {
+	return Step{
+		Name:   "join the tailnet",
+		Root:   true,
+		Script: fmt.Sprintf(joinTailnet, o.TailscaleTag, o.TailscaleKey),
+	}
 }
 
 // Run executes steps in order and stops at the first failure.
@@ -270,10 +282,56 @@ git -C "$dir" --no-pager log -1 --oneline
 // It also holds etcd's port 2380, which makes every later run, including the
 // scheduled reconcile, die on "address already in use" until someone kills it
 // by hand. INT first because mgmt tears down etcd cleanly on it.
+//
+// It runs as a transient unit rather than as a child of the ssh session, which
+// is how den-reconcile runs it. Two plain-ssh runs stalled on the package step
+// for 48 minutes while the same converge under systemd finished in 2.5, so the
+// session is a suspect, and a dropped session no longer takes mgmt with it.
+// The journal keeps every line: reattach with journalctl -fu den-apply-root.
+//
+// The watch samples the package machinery every 30 seconds into a file, so a
+// hang that does happen leaves a record of what was holding what.
+//
+// It takes den-reconcile's lock, because two mgmt runs cannot share etcd's
+// port and the reconcile timer does not know a manual apply is in flight.
 const runMgmt = `set -euo pipefail
-cd %s/mgmt
-timeout --signal=INT --kill-after=30s 30m \
-  mgmt run --no-autoedges --converger-timeout 30 --converged-exit%s lang ./metadata.yaml
+unit=den-apply-root
+runner=/run/den-apply-root.sh
+install -d -m 0700 /var/log/den
+watch=/var/log/den/apply-$(date +%%Y%%m%%dT%%H%%M%%S).watch
+
+cat > "$runner" <<'DEN_APPLY_EOF'
+set -euo pipefail
+exec 9>/run/den-reconcile.lock
+flock -w 900 9 || { echo "a reconcile held the lock for 15m, giving up" >&2; exit 1; }
+sample() {
+  while :; do
+    {
+      echo "== $(date -Is)"
+      ps -eo pid,ppid,etimes,stat,wchan:30,args |
+        grep -E '[a]pt|[d]pkg|[p]ackagekit|[u]nattended|[d]ebconf|[m]gmt run' || true
+      fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>&1 || true
+      systemctl list-jobs --no-pager --no-legend || true
+    } >>"$WATCH" 2>&1
+    sleep 30
+  done
+}
+sample &
+exec timeout --signal=INT --kill-after=30s 30m \
+  mgmt run --no-autoedges --converger-timeout 30 --converged-exit$NOOP lang ./metadata.yaml
+DEN_APPLY_EOF
+
+systemctl reset-failed "$unit" 2>/dev/null || true
+journalctl -f -n0 -o cat -u "$unit" &
+follow=$!
+echo "converging as $unit; package watch in $watch"
+rc=0
+systemd-run --unit="$unit" --wait --collect --quiet --service-type=exec \
+  --working-directory=%s/mgmt -E WATCH="$watch" -E NOOP="%s" \
+  /bin/bash "$runner" || rc=$?
+sleep 1
+kill "$follow" 2>/dev/null || true
+exit "$rc"
 `
 
 // runUserMgmt converges the user layer. It is not a root step: its resources
@@ -315,4 +373,28 @@ trap 'rm -f "$key"' EXIT
 printf '%%s' '%[2]s' > "$key"
 tailscale up --ssh --advertise-tags=%[1]s --auth-key="file:$key"
 tailscale status --peers=false
+`
+
+// TailnetState prints tailscaled's own view of itself, or {} before the
+// package is installed.
+const TailnetState = `if command -v tailscale >/dev/null; then
+  tailscale status --json --peers=false 2>/dev/null || echo '{}'
+else
+  echo '{}'
+fi
+`
+
+// RebootReason prints why den needs a reboot, or nothing. The NVIDIA check is
+// its own line because installing the driver does not always ask for one, and
+// without the module loaded there is no CDI spec for the GPU quadlets.
+const RebootReason = `if [ -e /run/reboot-required ]; then
+  echo "a package asked for it"
+elif modinfo nvidia >/dev/null 2>&1 && [ ! -e /proc/driver/nvidia/version ]; then
+  echo "the NVIDIA module is installed but not loaded"
+fi
+`
+
+// BootID changes on every boot, which is how a reboot is told apart from ssh
+// answering before the host has gone down.
+const BootID = `cat /proc/sys/kernel/random/boot_id
 `
