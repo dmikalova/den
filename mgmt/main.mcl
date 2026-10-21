@@ -558,12 +558,12 @@ exec "den-reconcile-units-v2" {
 #
 # den itself does the reporting, so the binary has to be on the host. Bump the
 # version here and in den-install.sh together.
-exec "den-binary-v1.9.0" {
+exec "den-binary-v2.0.0" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/den-install.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-binary-v1.9.0",
+	creates => "/var/lib/den/den-binary-v2.0.0",
 
 	Depend => File["/var/lib/den/"],
 }
@@ -573,7 +573,7 @@ file "/etc/systemd/system/den-notify@.service" {
 	content => deploy.readfile("/files/etc/systemd/system/den-notify@.service"),
 	mode => "0644",
 
-	Depend => Exec["den-binary-v1.9.0"],
+	Depend => Exec["den-binary-v2.0.0"],
 }
 
 # No mode: see /var/lib/den/ above.
