@@ -19,8 +19,8 @@ systemctl enable --now den-caddy-reload.path
 # it ever reaches the sealing step, which leaves the host unable to fix
 # itself. A fresh host therefore starts caddy at the reboot that follows.
 if [[ -f /etc/den/credentials/gcp-key.cred ]]; then
-	systemctl start caddy.service
-	systemctl reload caddy.service
+  systemctl start caddy.service
+  systemctl reload caddy.service
 fi
 
 touch /var/lib/den/caddy-units-v3
