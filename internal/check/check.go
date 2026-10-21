@@ -65,6 +65,16 @@ func List(user string) []Check {
 		// cannot be made as the login user.
 		{"backup repository connected", `sudo -n test -s /var/lib/kopia/repository.config`},
 
+		// The ping is the only signal that a job ran at all, and both ways it
+		// can break are silent. A den older than the ping subcommand makes
+		// every ExecStartPost= a no-op, and an empty directory means the
+		// secret never carried a URL. Neither shows up as a failed unit.
+		{"den can ping", `den 2>&1 | grep -q '^  den ping '`},
+		{
+			"healthcheck urls present",
+			`sudo -n sh -c 'ls -A /etc/den/healthcheck 2>/dev/null | grep -q .'`,
+		},
+
 		// smbd binds tailscale0, so it fails to start when the tailnet is not
 		// up. Active therefore means both things are true.
 		{"samba running", `systemctl is-active smbd`},
