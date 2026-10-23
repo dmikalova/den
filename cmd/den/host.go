@@ -369,11 +369,8 @@ func (f hostFlags) rebootIfNeeded(
 	defer cancel()
 	start := time.Now()
 	for {
-		if err := h.Wait(wait); err != nil {
-			return fmt.Errorf(
-				"den did not come back from the reboot, the TPM may not have unlocked it: try `ssh -t root@den.local systemd-tty-ask-password-agent`: %w",
-				err,
-			)
+		if err := waitUp(wait, h, stdout); err != nil {
+			return fmt.Errorf("den did not come back from the reboot: %w", err)
 		}
 		if now, err := h.Capture(wait, bootstrap.BootID); err == nil && now != "" && now != before {
 			_, err := fmt.Fprintf(stdout, "back in %s\n", time.Since(start).Round(time.Second))
@@ -381,10 +378,35 @@ func (f hostFlags) rebootIfNeeded(
 		}
 		select {
 		case <-wait.Done():
-			return fmt.Errorf(
-				"den did not come back from the reboot, the TPM may not have unlocked it: try `ssh -t root@den.local systemd-tty-ask-password-agent`: %w",
-				wait.Err(),
-			)
+			return fmt.Errorf("den did not come back from the reboot: %w", wait.Err())
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+// waitUp blocks until den answers ssh as the login user. If den stops in the
+// initramfs at the LUKS prompt instead, it hands this terminal to the
+// password agent there, so the operator types the passphrase in place. That
+// happens on every first boot, because the TPM is enrolled during it, and on
+// any boot where the TPM refuses to unseal.
+func waitUp(ctx context.Context, h remote.Host, stdout io.Writer) error {
+	if h.DryRun {
+		return nil
+	}
+	root := h.As("root")
+	for {
+		if h.Up(ctx) {
+			return nil
+		}
+		if root.Probe(ctx, "test -e /etc/initrd-release") {
+			_, _ = fmt.Fprintf(stdout, "\nden is waiting for its LUKS passphrase\n")
+			// The agent exits once it answers, and ssh drops as den leaves the
+			// initramfs, so its error says nothing. The next probe decides.
+			_ = root.Interactive(ctx, "systemd-tty-ask-password-agent")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for %s: %w", h.Addr, ctx.Err())
 		case <-time.After(5 * time.Second):
 		}
 	}
@@ -465,16 +487,45 @@ func bootstrapHost(ctx context.Context, args []string, stdout, stderr io.Writer)
 	}
 	h, o := f.split(stdout, stderr)
 
-	if _, err := fmt.Fprintf(stdout, "waiting for %s\n", h.Addr); err != nil {
+	if _, err := fmt.Fprintf(
+		stdout,
+		"bootstrapping %s%s\nwaiting for it to answer\n",
+		h.Addr,
+		mode(h.DryRun, o.Noop),
+	); err != nil {
 		return err
 	}
-	if err := h.Wait(ctx); err != nil {
+	if err := waitUp(ctx, h, stdout); err != nil {
 		return err
 	}
 	if err := bootstrap.Run(ctx, h, bootstrap.Bootstrap(o), stdout); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(stdout, "\nbootstrapped. Next:\n  den apply --host %s\n", h.Addr)
+	if err := f.apply(ctx, h, o, stdout, stderr); err != nil {
+		return err
+	}
+	// A noop converges nothing, so there is nothing yet to prove.
+	if o.Noop {
+		return nil
+	}
+	if err := bootstrap.Run(ctx, h, bootstrap.Prove(), stdout); err != nil {
+		return err
+	}
+	if !h.DryRun {
+		if _, err := fmt.Fprintf(stdout, "\nchecking\n"); err != nil {
+			return err
+		}
+		if err := runChecks(ctx, h, o.User, stdout); err != nil {
+			return fmt.Errorf(
+				"%w: the installer stick is kept, so a reinstall needs no rebuild",
+				err,
+			)
+		}
+	}
+	if err := bootstrap.Run(ctx, h, []bootstrap.Step{bootstrap.EraseStick()}, stdout); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(stdout, "\nden is installed\n")
 	return err
 }
 
@@ -493,6 +544,21 @@ func applyHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	); err != nil {
 		return err
 	}
+	if err := f.apply(ctx, h, o, stdout, stderr); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(stdout, "\napplied. Next:\n  den check --host %s\n", h.Addr)
+	return err
+}
+
+// apply is the converge that den apply runs alone and den bootstrap runs
+// after its first pass.
+func (f hostFlags) apply(
+	ctx context.Context,
+	h remote.Host,
+	o bootstrap.Options,
+	stdout, stderr io.Writer,
+) error {
 	auth := f.tailnetAuth(ctx, h.DryRun, stdout, stderr)
 	o.TailscaleKey = auth.authKey()
 
@@ -507,9 +573,5 @@ func applyHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	if err := f.rebootIfNeeded(ctx, h, o, stdout); err != nil {
 		return err
 	}
-	if err := bootstrap.Run(ctx, h, bootstrap.ApplyUser(o), stdout); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(stdout, "\napplied. Next:\n  den check --host %s\n", h.Addr)
-	return err
+	return bootstrap.Run(ctx, h, bootstrap.ApplyUser(o), stdout)
 }

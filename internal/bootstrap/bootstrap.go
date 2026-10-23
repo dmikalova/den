@@ -128,6 +128,23 @@ func ApplyUser(o Options) []Step {
 	}}
 }
 
+// Prove is what a fresh install runs once apply is done: it shows that the
+// notification path and the backup work end to end, which den check cannot,
+// because it never changes the host.
+func Prove() []Step {
+	return []Step{
+		{Name: "send a test notification", Root: true, Script: notifyUp},
+		{Name: "run the first backup", Root: true, Script: firstBackup},
+	}
+}
+
+// EraseStick zeroes the installer stick while it is still in den. The image
+// carries the console password hash, the LUKS passphrase and den's SSH host
+// key, so it must not outlive the install.
+func EraseStick() Step {
+	return Step{Name: "erase the installer stick", Root: true, Script: eraseStick}
+}
+
 // JoinTailnet enrols den with its OAuth client secret.
 func JoinTailnet(o Options) Step {
 	return Step{
@@ -208,6 +225,80 @@ fi
 echo
 lsblk -e 7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
 exit "$fail"
+`
+
+const notifyUp = `set -euo pipefail
+/usr/local/bin/den notify --title install "den is up"
+`
+
+const firstBackup = `set -euo pipefail
+systemctl start --wait kopia-backup.service
+`
+
+// eraseStick finds the stick by three facts at once: a whole disk on the USB
+// bus, an ISO 9660 file system, and the Ubuntu Server label the remaster
+// keeps. den's data disks match none of them. More than one match, or a
+// mounted one, stops the step rather than guessing.
+//
+// It zeroes the image, not the whole stick: the image ends at its last
+// partition or its ISO 9660 size, whichever is later, and the rest of the
+// stick never held anything from it.
+const eraseStick = `set -euo pipefail
+found=()
+while read -r name type tran; do
+  if [ "$type" != disk ] || [ "$tran" != usb ]; then
+    continue
+  fi
+  if lsblk -nro FSTYPE,LABEL "$name" | grep -E '^iso9660 Ubuntu-Server' >/dev/null; then
+    found+=("$name")
+  fi
+done < <(lsblk -dnpro NAME,TYPE,TRAN)
+
+case ${#found[@]} in
+0)
+  echo "no installer stick is plugged in, so there is nothing to erase"
+  exit 0
+  ;;
+1) ;;
+*)
+  echo "more than one installer stick: ${found[*]}; erase them by hand" >&2
+  exit 1
+  ;;
+esac
+
+disk=${found[0]}
+if [ -n "$(lsblk -nro MOUNTPOINTS "$disk" | tr -d '[:space:]')" ]; then
+  echo "$disk is mounted; unmount it and run den bootstrap again" >&2
+  exit 1
+fi
+
+end=$(isosize "$disk" 2>/dev/null || echo 0)
+base=$(basename "$disk")
+for part in /sys/class/block/"$base"/"$base"*; do
+  if [ ! -e "$part/start" ]; then
+    continue
+  fi
+  e=$(( ($(cat "$part/start") + $(cat "$part/size")) * 512 ))
+  if (( e > end )); then
+    end=$e
+  fi
+done
+size=$(blockdev --getsize64 "$disk")
+end=$(( end + 4 * 1024 * 1024 ))
+if (( end > size )); then
+  end=$size
+fi
+
+lsblk -dno NAME,MODEL,SIZE "$disk"
+echo "zeroing the first $(( end / 1024 / 1024 )) MiB of $disk"
+wipefs -a "$disk" >/dev/null
+dd if=/dev/zero of="$disk" bs=4M count="$end" iflag=count_bytes oflag=direct conv=fsync status=progress
+blockdev --rereadpt "$disk" || true
+if blkid -p "$disk" >/dev/null 2>&1; then
+  echo "$disk still has a signature after the erase" >&2
+  exit 1
+fi
+echo "erased $disk; you can remove it"
 `
 
 // removeOldTree deletes the pre-subvolume tree that the installer leaves at

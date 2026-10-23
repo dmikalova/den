@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -31,9 +32,9 @@ func usb(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "build":
-		return usbBuild(ctx, args[1:], stdout)
+		return usbBuild(ctx, args[1:], stdout, stderr)
 	case "memtest":
-		return usbMemtest(ctx, args[1:], stdout)
+		return usbMemtest(ctx, args[1:], stdout, stderr)
 	case "write":
 		return usbWrite(ctx, args[1:], stdout, stderr)
 	default:
@@ -41,7 +42,7 @@ func usb(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 }
 
-func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
+func usbBuild(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("den usb build", flag.ContinueOnError)
 	var (
 		iso      = fs.String("iso", "", "source ISO; downloaded into --cache when empty")
@@ -77,6 +78,7 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 			"file holding den's SSH ed25519 host key; overrides the secret",
 		)
 		timeout = fs.Int("menu-timeout", 1, "seconds GRUB waits before it starts the install")
+		write   = fs.Bool("write", true, "offer to write the image to a USB stick")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -131,22 +133,18 @@ func usbBuild(ctx context.Context, args []string, stdout io.Writer) error {
 	if err := autoinstall.Remaster(ctx, src, *out, seed, *timeout); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(
-		stdout,
-		"image   %s\n\nWrite it with:\n  sudo den usb write --image %s --device /dev/diskN --yes\n",
-		*out,
-		*out,
-	)
-	return nil
+	_, _ = fmt.Fprintf(stdout, "image   %s\n", *out)
+	return offerWrite(ctx, *out, *write, stdout, stderr)
 }
 
 // usbMemtest fetches the memory test image. It is a separate stick from the
 // install image: the test has to run before the installer writes anything.
-func usbMemtest(ctx context.Context, args []string, stdout io.Writer) error {
+func usbMemtest(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("den usb memtest", flag.ContinueOnError)
 	var (
 		version = fs.String("version", memtest.DefaultVersion, "memtest86+ release")
 		cache   = fs.String("cache", defaultCache(), "where downloaded images are kept")
+		write   = fs.Bool("write", true, "offer to write the image to a USB stick")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -159,13 +157,60 @@ func usbMemtest(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(
-		stdout,
-		"image   %s\n\nWrite it with:\n  sudo den usb write --image %s --device /dev/diskN --yes\n",
-		image,
+	_, _ = fmt.Fprintf(stdout, "image   %s\n", image)
+	return offerWrite(ctx, image, *write, stdout, stderr)
+}
+
+// offerWrite lists the USB sticks, asks which one to write, and writes it.
+// The build reads GCP secrets as the operator, so only the write runs under
+// sudo: it re-runs this binary as den usb write, which checks the disk again.
+func offerWrite(ctx context.Context, image string, write bool, stdout, stderr io.Writer) error {
+	hint := fmt.Sprintf(
+		"\nWrite it with:\n  sudo den usb write --image %s --device /dev/diskN --yes\n",
 		image,
 	)
+	if !write || !isTerminal(os.Stdin) {
+		_, _ = fmt.Fprint(stdout, hint)
+		return nil
+	}
+	stat, err := os.Stat(image)
+	if err != nil {
+		return err
+	}
+	disks, err := usbdisk.External(ctx)
+	if err != nil {
+		return err
+	}
+	disk, ok, err := usbdisk.Pick(os.Stdin, stdout, disks, stat.Size())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_, _ = fmt.Fprint(stdout, hint)
+		return nil
+	}
+
+	args := []string{"usb", "write", "--image", image, "--device", disk.Node, "--yes"}
+	if os.Geteuid() == 0 {
+		return usbWrite(ctx, args[2:], stdout, stderr)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "sudo", append([]string{exe}, args...)...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("writing %s: %w", disk.Node, err)
+	}
 	return nil
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 func usbWrite(ctx context.Context, args []string, stdout, stderr io.Writer) error {

@@ -81,7 +81,7 @@ Usage:
   den usb build [flags]              build an unattended install image
   den usb memtest [flags]            fetch the memtest86+ image
   den usb write --device <node>      write an image to a removable disk
-  den bootstrap [flags]              patch a fresh install and install mgmt
+  den bootstrap [flags]              take a fresh install to a checked den
   den apply [flags]                  converge den's root layer with mgmt
   den check [flags]                  run the smoke checks against a host
   den notify [flags] [message]       report an event to Discord, from den

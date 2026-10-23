@@ -46,7 +46,11 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 ## Writing to a disk
 
 `den usb write` refuses an internal disk and requires `--yes`. Do not add a
-flag that removes that check.
+flag that removes that check. The write prompt in `den usb build` offers only
+disks that pass the same check, and `den usb write` checks again.
+
+`den bootstrap` erases the installer stick on den. It matches a USB disk with
+an ISO 9660 `Ubuntu-Server` label, and only one. Do not loosen that match.
 
 ## Reaching den
 

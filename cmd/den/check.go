@@ -22,14 +22,19 @@ func checkHost(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 
 	h := remote.Host{Addr: *host, Stdout: stdout, Stderr: stderr}
-	out, err := h.Capture(ctx, check.Script(*user))
+	return runChecks(ctx, h, *user, stdout)
+}
+
+// runChecks runs the smoke checks on h and prints one line for each.
+func runChecks(ctx context.Context, h remote.Host, user string, stdout io.Writer) error {
+	out, err := h.Capture(ctx, check.Script(user))
 	if err != nil {
-		return fmt.Errorf("running checks on %s: %w", *host, err)
+		return fmt.Errorf("running checks on %s: %w", h.Addr, err)
 	}
 
 	results := check.Parse(out)
 	if len(results) == 0 {
-		return fmt.Errorf("%s reported no checks at all", *host)
+		return fmt.Errorf("%s reported no checks at all", h.Addr)
 	}
 	for _, r := range results {
 		mark := "ok  "

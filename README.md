@@ -19,12 +19,11 @@ Build an unattended Ubuntu Server install image and write it to a USB drive:
 
 ```bash
 den usb build
-diskutil list external
-sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskX
 ```
 
 The build downloads the Ubuntu ISO and verifies it against Canonical's signing
-key. Pass `--iso <path>` to use a copy you already have.
+key. Pass `--iso <path>` to use a copy you already have. It then lists the
+external disks and asks which one to write.
 
 See [docs/install.md](docs/install.md) for the full procedure.
 
@@ -32,7 +31,6 @@ Build a memtest86+ stick, to test the memory before the box holds data:
 
 ```bash
 den usb memtest
-sudo den usb write --image ~/Downloads/memtest86plus-8.10.iso --device /dev/diskX
 ```
 
 See [docs/memtest.md](docs/memtest.md) for the full procedure.
@@ -41,11 +39,11 @@ Configure the host once the install has finished:
 
 ```bash
 den bootstrap
-den apply
 ```
 
-`bootstrap` patches the fresh install and puts mgmt on it. `apply` converges
-the root layer described in `mgmt/`, installs Tailscale and joins the tailnet,
-and is safe to repeat.
+`bootstrap` unlocks the first boot, patches the fresh install, puts mgmt on
+it, and runs `apply`. It then proves the install and erases the installer
+stick. `den apply` converges the root layer described in `mgmt/`, installs
+Tailscale and joins the tailnet, and is safe to repeat.
 
 See [docs/install.md](docs/install.md) for the full procedure.

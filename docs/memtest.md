@@ -10,12 +10,11 @@ Test the memory after you set the EXPO profile and before you install.
 
 ```bash
 den usb memtest
-diskutil list external
-sudo den usb write --image ~/Downloads/memtest86plus-8.10.iso --device /dev/diskX --yes
 ```
 
 `den usb memtest` downloads the image, checks it against the published
-checksum list, and unpacks it. Pass `--version` for a different release.
+checksum list, and unpacks it. It then lists the external disks and asks
+which one to write. Pass `--version` for a different release.
 
 The memtest86+ project publishes no signature over its checksum list. The
 checksum proves the download is intact. It does not prove the host is honest.

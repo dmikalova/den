@@ -12,32 +12,18 @@ Run these in order on the Mac. Each step is explained in [Steps](#steps).
 # 0. Reinstall only: take a last backup and parity sync
 ssh dmikalova@den.local sudo systemctl start --wait kopia-backup.service snapraid-sync.service
 
-# 1. Build the image
+# 1. Build the image, and pick the USB stick to write it to
 go install github.com/dmikalova/den/cmd/den@latest
 den usb build
 
-# 2. Write the USB stick
-diskutil list external
-sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskN --yes
-
-# 3. Put the stick in den and boot from it. Wait for the install to reboot den.
+# 2. Put the stick in den and boot from it
 ssh dmikalova@den.local 'sudo efibootmgr --bootnext 0002 && sudo systemctl reboot'
 
-# 4. Unlock the disk, once
-ssh -t root@den.local systemd-tty-ask-password-agent
-
-# 5. Configure den
+# 3. Configure den. Type the LUKS passphrase when it asks.
 den bootstrap
-den apply
-
-# 6. Check den
-ssh dmikalova@den.local sudo den notify --title install "den is up"
-ssh dmikalova@den.local sudo systemctl start --wait kopia-backup.service
-den check
-
-# 7. Erase the USB stick
-sudo diskutil zeroDisk /dev/diskN
 ```
+
+Then remove the stick.
 
 ## Steps
 
@@ -47,7 +33,7 @@ Reinstall only. The NVMe holds `/srv/appdata`, which kopia backs up but
 nothing restores automatically. A last run keeps the loss to zero. The parity
 sync makes the array consistent before den goes offline.
 
-### 1. Build the image
+### 1. Build the image and write the stick
 
 `den usb build` downloads the Ubuntu Server ISO into `~/Downloads`. It checks
 the ISO against Canonical's signed `SHA256SUMS`, and stops if the signature
@@ -74,16 +60,18 @@ admin can read it, so den itself never can.
 Pass `--iso <path>` to use an ISO that you already have. Pass
 `--password-file` or `--luks-passphrase-file` to build without GCP.
 
-### 2. Write the USB stick
+**Caution: the write erases the whole stick.** After the build, `den usb
+build` lists the external disks that can hold the image. It does not list an
+internal disk, a disk that is not removable, or a disk that is too small. It
+cannot tell one USB stick from another, so read the name and size before you
+pick a number. Press Enter to skip the write.
 
-**Caution: the write erases the whole disk.** `den usb write` refuses an
-internal disk, a disk that is not removable, and a partition. It cannot tell
-one USB stick from another. Read the printed name and size before you pass
-`--yes`.
+The write runs under `sudo`, so it asks for your Mac password. It reads the
+stick back and compares its SHA256 with the image. To write an image again
+without a build, use
+`sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskN --yes`.
 
-The write reads the stick back and compares its SHA256 with the image.
-
-### 3. Install
+### 2. Install
 
 The `efibootmgr` command boots den from the stick one time. `0002` is the
 `UEFI:Removable Device` entry. If `sudo efibootmgr` shows another number, use
@@ -93,24 +81,11 @@ in the firmware boot menu.
 The installer asks no questions. It installs to `/dev/nvme0n1`, which it
 selects by path, so the data drives are never candidates. It then reboots.
 
-### 4. Unlock once
+### 3. Configure den
 
-The first boot stops at the LUKS passphrase prompt. You can type the
-passphrase on the console, or over SSH from the Mac. The initramfs runs its
-own sshd, with den's host keys and your authorized keys. Type the passphrase
-at the `systemd-tty-ask-password-agent` prompt. The session closes when the
-boot continues. If `den.local` does not answer, use den's LAN address. See
-[initrd/README.md](../internal/autoinstall/initrd/README.md).
-
-During that boot, `den-tpm-enroll.service` binds a LUKS key slot to TPM PCR 7
-and shreds the copy of the passphrase that the installer left in
-`/etc/den/luks.key`. From the next boot, the TPM unlocks the disk.
-
-**Keep the LUKS passphrase in Bitwarden.** A firmware update changes PCR 7,
-and then den asks for the passphrase again. Unlock it over SSH in the same
-way.
-
-### 5. Configure den
+Run `den bootstrap` after den goes down for the install. It waits for the
+install to finish, and then does all the work below. If a step fails, fix the
+cause and run `den bootstrap` again. Each step is safe to run again.
 
 den answers to `den.local` over mDNS, so you do not need an SSH config entry.
 If mDNS does not answer, get the address from the console with
@@ -122,7 +97,26 @@ SSH does not ask about the host key, because every install has the same key:
 host key changed, stop.** The install did not take the key. Find out why
 before you accept anything.
 
-`den bootstrap` runs once. In order, it:
+#### Unlock
+
+The first boot stops at the LUKS passphrase prompt. The initramfs runs its own
+sshd, with den's host keys and your authorized keys. `den bootstrap` finds
+it, and shows the prompt in your terminal. Type the passphrase. You can also
+type it on den's console. See
+[initrd/README.md](../internal/autoinstall/initrd/README.md).
+
+During that boot, `den-tpm-enroll.service` binds a LUKS key slot to TPM PCR 7
+and shreds the copy of the passphrase that the installer left in
+`/etc/den/luks.key`. From the next boot, the TPM unlocks the disk.
+
+**Keep the LUKS passphrase in Bitwarden.** A firmware update changes PCR 7,
+and then den asks for the passphrase again. `den bootstrap` and `den apply`
+show the prompt when they wait for a reboot. At other times, run
+`ssh -t root@den.local systemd-tty-ask-password-agent`.
+
+#### Bootstrap
+
+In order, `den bootstrap`:
 
 1. Checks the install, and stops if any check fails:
    - `/` is the `@` subvolume, and swap is `/swap/swapfile`.
@@ -139,7 +133,10 @@ before you accept anything.
 5. Deletes the tree that the installer leaves at the top of the filesystem.
    den now boots from `@`, so that fallback is not necessary.
 
-`den apply` is safe to run at any time. In order, it:
+#### Apply
+
+`den bootstrap` then does the same work as `den apply`. `den apply` is safe
+to run at any time. In order, it:
 
 1. Clones or pulls `/srv/den-config` from GitHub. Push before you apply.
 2. Converges the root layer, `mgmt/main.mcl`.
@@ -160,35 +157,32 @@ address that the `*.den.mklv.tech` records point to. The infrastructure repo
 sets the same address in `den/dns`. If you change it, change both. If step 4
 warns, set the address in the Tailscale admin console.
 
-If the reboot does not come back, try `ssh -t root@den.local
-systemd-tty-ask-password-agent`. A passphrase prompt means that the TPM did
-not unlock the disk.
-
 The root converge runs as the transient unit `den-apply-root`. If the SSH
 session drops, the converge continues. Reattach with
 `journalctl -fu den-apply-root`. If the package step hangs, read
 `/var/log/den/apply-<time>.watch`.
 
-### 6. Check den
+#### Prove
 
-`den notify` must reach Discord. If it does not, nothing later tells you
-when something breaks. Fix it before you continue. `den notify` needs root,
-because `/etc/den` is `0700`.
+Last, `den bootstrap`:
 
-The kopia run connects den to the existing B2 repository. Without it, the
-`backup repository connected` check fails until the 22:00 timer.
-
-`den check` makes 23 assertions in one SSH round trip. It is the signoff.
-
-### 7. Erase the USB stick
-
-The stick holds the LUKS passphrase in clear.
+1. Sends a test notification. It must reach Discord. If it does not, nothing
+   later tells you when something breaks.
+2. Runs the first kopia backup. This connects den to the existing B2
+   repository. Without it, the `backup repository connected` check fails
+   until the 22:00 timer.
+3. Runs `den check`, which makes 23 assertions in one SSH round trip. It is
+   the signoff. If a check fails, `den bootstrap` stops and keeps the stick.
+4. Erases the installer stick, which holds the LUKS passphrase and den's host
+   key. It erases only a USB disk with an ISO 9660 file system and an
+   `Ubuntu-Server` label. It stops if it finds more than one. It zeroes the
+   part of the stick that the image used, which takes a few minutes.
 
 ## Previews
 
 ```sh
-den bootstrap --dry-run
-den apply --dry-run     # prints every script, contacts nothing
+den bootstrap --dry-run # prints every script, contacts nothing
+den apply --dry-run
 den apply --noop        # runs mgmt and reports what it would change
 ```
 

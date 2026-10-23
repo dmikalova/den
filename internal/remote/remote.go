@@ -88,6 +88,15 @@ func (h Host) Capture(ctx context.Context, script string) (string, error) {
 	return strings.TrimSpace(out.String()), nil
 }
 
+// Up reports whether the host answers ssh right now. Unlike Probe it may
+// prompt, so a host key new to known_hosts can still be accepted.
+func (h Host) Up(ctx context.Context) bool {
+	if h.DryRun {
+		return true
+	}
+	return h.command(ctx, false, "true").Run() == nil
+}
+
 // Wait blocks until the host answers ssh. A fresh install reboots at least
 // once, so anything that follows a reboot needs this.
 func (h Host) Wait(ctx context.Context) error {
@@ -96,8 +105,7 @@ func (h Host) Wait(ctx context.Context) error {
 	}
 	const between = 5 * time.Second
 	for {
-		cmd := h.command(ctx, false, "true")
-		if err := cmd.Run(); err == nil {
+		if h.Up(ctx) {
 			return nil
 		}
 		select {
@@ -106,6 +114,43 @@ func (h Host) Wait(ctx context.Context) error {
 		case <-time.After(between):
 		}
 	}
+}
+
+// As is the same destination, logged in as user. An alias with no user part
+// gets one, so ssh_config still resolves the address.
+func (h Host) As(user string) Host {
+	addr := h.Addr
+	if i := strings.LastIndex(addr, "@"); i >= 0 {
+		addr = addr[i+1:]
+	}
+	h.Addr = user + "@" + addr
+	return h
+}
+
+// Probe runs remote once and reports whether it exited zero. BatchMode stops
+// ssh from asking for anything, so a probe can never hang on a prompt.
+func (h Host) Probe(ctx context.Context, remote string) bool {
+	if h.DryRun {
+		return false
+	}
+	args := []string{"-o", "ConnectTimeout=" + probeTimeout, "-o", "BatchMode=yes", h.Addr, remote}
+	return exec.CommandContext(ctx, "ssh", args...).Run() == nil
+}
+
+// Interactive runs remote with this process's terminal attached, for a
+// command that needs the operator to type.
+func (h Host) Interactive(ctx context.Context, remote string) error {
+	if h.DryRun {
+		return h.print("run interactively", remote)
+	}
+	cmd := h.command(ctx, true, remote)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = h.Stdout
+	cmd.Stderr = h.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %w", h.Addr, err)
+	}
+	return nil
 }
 
 func (h Host) command(ctx context.Context, tty bool, remote string) *exec.Cmd {

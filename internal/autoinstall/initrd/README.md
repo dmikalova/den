@@ -17,9 +17,11 @@ because dracut reads them from `/usr/lib/dracut/modules.d` on every rebuild.
 
 ## Unlock
 
+`den bootstrap` and `den apply` find the prompt when they wait for den, and
+show it in your terminal. At other times, run:
+
 ```sh
-ssh root@den.local
-systemd-tty-ask-password-agent
+ssh -t root@den.local systemd-tty-ask-password-agent
 ```
 
 The initramfs uses den's normal host keys, so `known_hosts` does not change.

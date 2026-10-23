@@ -4,6 +4,7 @@
 package usbdisk
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -45,11 +47,9 @@ func Describe(ctx context.Context, node string) (Disk, error) {
 	if err != nil {
 		return Disk{}, fmt.Errorf("diskutil info %s: %w", node, err)
 	}
-	conv := exec.CommandContext(ctx, "plutil", "-convert", "json", "-o", "-", "-")
-	conv.Stdin = bytes.NewReader(info)
-	out, err := conv.Output()
+	out, err := plistJSON(ctx, info)
 	if err != nil {
-		return Disk{}, fmt.Errorf("reading diskutil output: %w", err)
+		return Disk{}, err
 	}
 
 	var d struct {
@@ -71,6 +71,91 @@ func Describe(ctx context.Context, node string) (Disk, error) {
 		Removable: d.RemovableMediaOrExternalDevice,
 		WholeDisk: d.WholeDisk,
 	}, nil
+}
+
+// External lists the whole physical disks macOS sees as external. The caller
+// still checks each one with Writable before it writes anything.
+func External(ctx context.Context) ([]Disk, error) {
+	if runtime.GOOS != "darwin" {
+		return nil, fmt.Errorf("listing disks runs on macOS only")
+	}
+	plist, err := exec.CommandContext(ctx, "diskutil", "list", "-plist", "external", "physical").
+		Output()
+	if err != nil {
+		return nil, fmt.Errorf("diskutil list: %w", err)
+	}
+	js, err := plistJSON(ctx, plist)
+	if err != nil {
+		return nil, err
+	}
+	names, err := parseWholeDisks(js)
+	if err != nil {
+		return nil, err
+	}
+	disks := make([]Disk, 0, len(names))
+	for _, n := range names {
+		d, err := Describe(ctx, "/dev/"+n)
+		if err != nil {
+			return nil, err
+		}
+		disks = append(disks, d)
+	}
+	return disks, nil
+}
+
+func parseWholeDisks(js []byte) ([]string, error) {
+	var l struct {
+		WholeDisks []string `json:"WholeDisks"`
+	}
+	if err := json.Unmarshal(js, &l); err != nil {
+		return nil, fmt.Errorf("reading diskutil output: %w", err)
+	}
+	return l.WholeDisks, nil
+}
+
+func plistJSON(ctx context.Context, plist []byte) ([]byte, error) {
+	conv := exec.CommandContext(ctx, "plutil", "-convert", "json", "-o", "-", "-")
+	conv.Stdin = bytes.NewReader(plist)
+	out, err := conv.Output()
+	if err != nil {
+		return nil, fmt.Errorf("reading diskutil output: %w", err)
+	}
+	return out, nil
+}
+
+// Pick asks which disk to write. Only disks that pass Writable are offered.
+// An empty answer skips the write, so ok is false with no error.
+func Pick(in io.Reader, out io.Writer, disks []Disk, imageSize int64) (Disk, bool, error) {
+	var offer []Disk
+	for _, d := range disks {
+		if d.Writable(imageSize) == nil {
+			offer = append(offer, d)
+		}
+	}
+	if len(offer) == 0 {
+		_, _ = fmt.Fprintf(out, "no removable disk large enough is plugged in\n")
+		return Disk{}, false, nil
+	}
+
+	_, _ = fmt.Fprintf(out, "\nWrite the image to a USB stick? Its contents are erased.\n")
+	for i, d := range offer {
+		_, _ = fmt.Fprintf(out, "  %d) %s  %s  %.1f GB\n", i+1, d.Node, d.Name, float64(d.Size)/1e9)
+	}
+	_, _ = fmt.Fprintf(out, "Number, or Enter to skip: ")
+
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return Disk{}, false, err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return Disk{}, false, nil
+	}
+	n, err := strconv.Atoi(line)
+	if err != nil || n < 1 || n > len(offer) {
+		return Disk{}, false, fmt.Errorf("%q is not one of the disks listed", line)
+	}
+	return offer[n-1], true, nil
 }
 
 // Writable reports why a disk must not be written to, or nil if it may be.
