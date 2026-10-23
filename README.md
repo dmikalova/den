@@ -26,7 +26,7 @@ sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskX
 The build downloads the Ubuntu ISO and verifies it against Canonical's signing
 key. Pass `--iso <path>` to use a copy you already have.
 
-See [docs/autoinstall.md](docs/autoinstall.md) for the full procedure.
+See [docs/install.md](docs/install.md) for the full procedure.
 
 Build a memtest86+ stick, to test the memory before the box holds data:
 
@@ -48,4 +48,4 @@ den apply
 the root layer described in `mgmt/`, installs Tailscale and joins the tailnet,
 and is safe to repeat.
 
-See [docs/bootstrap.md](docs/bootstrap.md) for the full procedure.
+See [docs/install.md](docs/install.md) for the full procedure.

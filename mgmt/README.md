@@ -47,7 +47,7 @@ here, because here it can be changed by editing a file and running `den apply`.
 Swap is the clearest example of the line. The disk swapfile needs its own
 subvolume created before the tree moves into `@`, so it is an install
 concern. zram is a package and a config file, so it is a mgmt concern. See
-[docs/autoinstall.md](../docs/autoinstall.md).
+[docs/install.md](../docs/install.md).
 
 ## Rules
 
@@ -104,4 +104,4 @@ delivery path. Nothing outside the house pushes to den.
 
 CI shortens the wait rather than replacing it. The `apply` workflow joins a
 runner to the tailnet, runs `den-reconcile` over Tailscale SSH, and the runner
-leaves. See [../docs/bootstrap.md](../docs/bootstrap.md).
+leaves. See [../docs/install.md](../docs/install.md#ci-and-the-tailnet).

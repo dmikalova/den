@@ -5,7 +5,7 @@
 # user's own systemd. What root owns is the ground those quadlets stand on:
 # packages, mounts, lingering, and a few one shot enablements.
 #
-# mgmt converges this once and exits. See docs/bootstrap.md.
+# mgmt converges this once and exits. See docs/install.md.
 
 import "deploy"
 import "os"

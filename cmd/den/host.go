@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/dmikalova/den/internal/bootstrap"
@@ -17,9 +19,10 @@ import (
 	"github.com/dmikalova/den/internal/tailnet"
 )
 
-// defaultHost is the ssh destination. Put a Host block in ~/.ssh/config so a
-// reinstall only changes one file.
-const defaultHost = "den"
+// defaultHost is the ssh destination. den answers to den.local over mDNS on
+// the LAN, so no machine needs a Host block. Off the LAN, pass --host den to
+// reach it through MagicDNS.
+const defaultHost = "dmikalova@den.local"
 
 // den's tailnet OAuth client lives in GCP Secret Manager, written there by the
 // infrastructure repo's tailscale stack. The secret is a JSON object, so the
@@ -191,7 +194,8 @@ func (f hostFlags) tailnetAuth(
 // enrol joins den to the tailnet unless it is already on it. A tailscaled with
 // no node identity means a fresh install, and the previous install's node is
 // still registered under den, so it is removed first or this one enrols as
-// den-1 and every name pointing at den reaches the dead node.
+// den-1 and every name pointing at den reaches the dead node. The new node
+// then takes the old node's IPv4, so the DNS records need no change.
 func (f hostFlags) enrol(
 	ctx context.Context,
 	h remote.Host,
@@ -207,13 +211,9 @@ func (f hostFlags) enrol(
 		return bootstrap.Run(ctx, h, join, stdout)
 	}
 
-	raw, err := h.Capture(ctx, bootstrap.TailnetState)
+	state, err := readTailnetState(ctx, h)
 	if err != nil {
-		return fmt.Errorf("reading tailscaled's state: %w", err)
-	}
-	var state struct{ BackendState string }
-	if err := json.Unmarshal([]byte(raw), &state); err != nil {
-		return fmt.Errorf("reading tailscaled's state: %w", err)
+		return err
 	}
 	switch state.BackendState {
 	case "Running":
@@ -222,20 +222,88 @@ func (f hostFlags) enrol(
 	case "":
 		_, err := fmt.Fprintln(stdout, "\ntailscale is not installed yet, skipping the join")
 		return err
-	case "NeedsLogin", "NoState":
-		f.removeStaleNode(ctx, h, auth, stdout, stderr)
 	}
-	return bootstrap.Run(ctx, h, join, stdout)
+
+	var client *tailnet.Client
+	var oldIPv4 string
+	if state.BackendState == "NeedsLogin" || state.BackendState == "NoState" {
+		client, oldIPv4 = f.removeStaleNode(ctx, h, auth, stdout, stderr)
+	}
+	if err := bootstrap.Run(ctx, h, join, stdout); err != nil {
+		return err
+	}
+	if client != nil && oldIPv4 != "" {
+		keepIPv4(ctx, h, client, oldIPv4, stdout, stderr)
+	}
+	return nil
 }
 
-// removeStaleNode deletes the disconnected namesakes of this host. A failure
+// tailnetState is the part of `tailscale status --json` den reads.
+type tailnetState struct {
+	BackendState string
+	Self         struct {
+		ID           string
+		TailscaleIPs []string
+	}
+}
+
+func readTailnetState(ctx context.Context, h remote.Host) (tailnetState, error) {
+	var state tailnetState
+	raw, err := h.Capture(ctx, bootstrap.TailnetState)
+	if err != nil {
+		return state, fmt.Errorf("reading tailscaled's state: %w", err)
+	}
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return state, fmt.Errorf("reading tailscaled's state: %w", err)
+	}
+	return state, nil
+}
+
+// keepIPv4 moves the old node's IPv4 to the node that just joined. A failure
+// only warns: den works on the new address, but the den/dns stack in the
+// infrastructure repo then has to be applied to follow it.
+func keepIPv4(
+	ctx context.Context,
+	h remote.Host,
+	client *tailnet.Client,
+	ipv4 string,
+	stdout, stderr io.Writer,
+) {
+	warn := func(err error) {
+		_, _ = fmt.Fprintf(
+			stderr,
+			"could not keep den's tailnet address %s, apply den/dns in the infrastructure repo: %v\n",
+			ipv4,
+			err,
+		)
+	}
+	state, err := readTailnetState(ctx, h)
+	if err != nil {
+		warn(err)
+		return
+	}
+	if slices.Contains(state.Self.TailscaleIPs, ipv4) {
+		return
+	}
+	if state.Self.ID == "" {
+		warn(errors.New("tailscaled reported no node ID"))
+		return
+	}
+	_, _ = fmt.Fprintf(stdout, "moving den's tailnet address back to %s\n", ipv4)
+	if err := client.SetIPv4(ctx, state.Self.ID, ipv4); err != nil {
+		warn(err)
+	}
+}
+
+// removeStaleNode deletes the disconnected namesakes of this host and returns
+// the client and the IPv4 of the first one deleted, for keepIPv4. A failure
 // only warns: the join still works, it just lands as den-1.
 func (f hostFlags) removeStaleNode(
 	ctx context.Context,
 	h remote.Host,
 	auth tailnetAuth,
 	stdout, stderr io.Writer,
-) {
+) (*tailnet.Client, string) {
 	warn := func(err error) {
 		_, _ = fmt.Fprintf(
 			stderr,
@@ -246,24 +314,30 @@ func (f hostFlags) removeStaleNode(
 	hostname, err := h.Capture(ctx, "hostname")
 	if err != nil {
 		warn(err)
-		return
+		return nil, ""
 	}
 	client, err := tailnet.New(ctx, tailnet.DefaultBaseURL, auth.id, auth.secret)
 	if err != nil {
 		warn(err)
-		return
+		return nil, ""
 	}
 	devices, err := client.Devices(ctx)
 	if err != nil {
 		warn(err)
-		return
+		return nil, ""
 	}
+	var ipv4 string
 	for _, d := range tailnet.Stale(devices, hostname, *f.tsTag) {
 		_, _ = fmt.Fprintf(stdout, "removing the stale tailnet node %s (%s)\n", d.Name, d.NodeID)
 		if err := client.Delete(ctx, d.NodeID); err != nil {
 			warn(err)
+			continue
+		}
+		if ipv4 == "" {
+			ipv4 = d.IPv4()
 		}
 	}
+	return client, ipv4
 }
 
 // rebootIfNeeded reboots den and waits for it to come back on a new boot. It

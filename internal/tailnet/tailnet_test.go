@@ -75,3 +75,52 @@ func TestNewRejectsAMissingClient(t *testing.T) {
 		t.Fatal("an empty client was accepted")
 	}
 }
+
+func TestDeviceIPv4SkipsIPv6(t *testing.T) {
+	d := Device{Addresses: []string{"fd7a:115c:a1e0::a028:192f", "100.65.25.45"}}
+	if got := d.IPv4(); got != "100.65.25.45" {
+		t.Errorf("IPv4 = %q, want 100.65.25.45", got)
+	}
+	if got := (Device{Addresses: []string{"fd7a:115c:a1e0::1"}}).IPv4(); got != "" {
+		t.Errorf("IPv4 of an IPv6-only device = %q, want empty", got)
+	}
+}
+
+func TestSetIPv4PostsTheAddress(t *testing.T) {
+	var gotPath, gotType string
+	var gotBody map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/oauth/token" {
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "tok"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+			return
+		}
+		gotPath = r.URL.Path
+		gotType = r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	c, err := New(ctx, srv.URL, "id", "secret")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := c.SetIPv4(ctx, "nNEW", "100.65.25.45"); err != nil {
+		t.Fatalf("SetIPv4: %v", err)
+	}
+	if gotPath != "/api/v2/device/nNEW/ip" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotType != "application/json" {
+		t.Errorf("Content-Type = %q", gotType)
+	}
+	if gotBody["ipv4"] != "100.65.25.45" {
+		t.Errorf("body = %v", gotBody)
+	}
+}

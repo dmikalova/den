@@ -1,6 +1,8 @@
-// Package tailnet talks to the Tailscale API with den's OAuth client. Its one
-// job is the step den cannot do for itself: removing the node a reinstall left
-// behind, so the new install enrols as den rather than den-1.
+// Package tailnet talks to the Tailscale API with den's OAuth client. It does
+// the steps den cannot do for itself on a reinstall: removing the node the old
+// install left behind, so the new one enrols as den rather than den-1, and
+// moving the old node's IPv4 to the new one, so every record that points at
+// den stays correct.
 package tailnet
 
 import (
@@ -11,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -35,7 +38,18 @@ type Device struct {
 	Hostname           string   `json:"hostname"`
 	Name               string   `json:"name"`
 	Tags               []string `json:"tags"`
+	Addresses          []string `json:"addresses"`
 	ConnectedToControl bool     `json:"connectedToControl"`
+}
+
+// IPv4 is the device's tailnet IPv4 address, or "" if it has none.
+func (d Device) IPv4() string {
+	for _, a := range d.Addresses {
+		if ip, err := netip.ParseAddr(a); err == nil && ip.Is4() {
+			return a
+		}
+	}
+	return ""
 }
 
 // New exchanges the client credentials for an access token. The secret is a
@@ -99,6 +113,27 @@ func (c *Client) Delete(ctx context.Context, nodeID string) error {
 	}
 	if err := c.do(req, nil); err != nil {
 		return fmt.Errorf("deleting device %s: %w", nodeID, err)
+	}
+	return nil
+}
+
+// SetIPv4 gives a device a specific tailnet IPv4 address. The address must be
+// free, so the device that held it has to be deleted first. Tailscale has no
+// equivalent for IPv6.
+func (c *Client) SetIPv4(ctx context.Context, nodeID, ipv4 string) error {
+	body, err := json.Marshal(map[string]string{"ipv4": ipv4})
+	if err != nil {
+		return fmt.Errorf("encoding the address: %w", err)
+	}
+	req, err := c.request(ctx, http.MethodPost, "/api/v2/device/"+url.PathEscape(nodeID)+"/ip")
+	if err != nil {
+		return err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.do(req, nil); err != nil {
+		return fmt.Errorf("setting %s's IPv4 to %s: %w", nodeID, ipv4, err)
 	}
 	return nil
 }
