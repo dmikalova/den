@@ -26,4 +26,4 @@ install -d -o "$user" -g "$user" -m 0700 /mnt/storage/timemachine
 
 # Catches a typo in smb.conf here, where it is a failed unit and a Discord
 # message, rather than at the next restart of smbd.
-testparm --suppress-prompt --silent /etc/samba/smb.conf
+testparm --suppress-prompt /etc/samba/smb.conf >/dev/null
