@@ -20,8 +20,11 @@ den usb build
 diskutil list external
 sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskN --yes
 
-# 3. Boot den from the stick. Wait for it to reboot.
-# 4. Type the LUKS passphrase on den's console, once.
+# 3. Put the stick in den and boot from it. Wait for the install to reboot den.
+ssh dmikalova@den.local 'sudo efibootmgr --bootnext 0002 && sudo systemctl reboot'
+
+# 4. Unlock the disk, once
+ssh -t root@den.local systemd-tty-ask-password-agent
 
 # 5. Configure den
 den bootstrap
@@ -82,19 +85,30 @@ The write reads the stick back and compares its SHA256 with the image.
 
 ### 3. Install
 
-Boot den from the stick. The installer asks no questions. It installs to
-`/dev/nvme0n1`, which it selects by path, so the data drives are never
-candidates. It then reboots.
+The `efibootmgr` command boots den from the stick one time. `0002` is the
+`UEFI:Removable Device` entry. If `sudo efibootmgr` shows another number, use
+that number. On a first install, or if den does not answer, select the stick
+in the firmware boot menu.
+
+The installer asks no questions. It installs to `/dev/nvme0n1`, which it
+selects by path, so the data drives are never candidates. It then reboots.
 
 ### 4. Unlock once
 
-The first boot asks for the LUKS passphrase on the console. During that boot,
-`den-tpm-enroll.service` binds a LUKS key slot to TPM PCR 7 and shreds the
-copy of the passphrase that the installer left in `/etc/den/luks.key`. From
-the next boot, the TPM unlocks the disk.
+The first boot stops at the LUKS passphrase prompt. You can type the
+passphrase on the console, or over SSH from the Mac. The initramfs runs its
+own sshd, with den's host keys and your authorized keys. Type the passphrase
+at the `systemd-tty-ask-password-agent` prompt. The session closes when the
+boot continues. If `den.local` does not answer, use den's LAN address. See
+[initrd/README.md](../internal/autoinstall/initrd/README.md).
+
+During that boot, `den-tpm-enroll.service` binds a LUKS key slot to TPM PCR 7
+and shreds the copy of the passphrase that the installer left in
+`/etc/den/luks.key`. From the next boot, the TPM unlocks the disk.
 
 **Keep the LUKS passphrase in Bitwarden.** A firmware update changes PCR 7,
-and then den asks for the passphrase again.
+and then den asks for the passphrase again. Unlock it over SSH in the same
+way.
 
 ### 5. Configure den
 
@@ -115,6 +129,7 @@ before you accept anything.
    - The timezone is `America/Los_Angeles`, and NTP is on.
    - `den-tpm-enroll.service` finished, and `/etc/crypttab` unlocks with the
      TPM.
+   - The initramfs has sshd for SSH unlock.
    - No unit failed.
 2. Lists the disks. Make sure that the four data drives are as they were:
    empty on a first install, with their filesystems on a reinstall.
@@ -145,8 +160,9 @@ address that the `*.den.mklv.tech` records point to. The infrastructure repo
 sets the same address in `den/dns`. If you change it, change both. If step 4
 warns, set the address in the Tailscale admin console.
 
-If the reboot does not come back, look at den's console. A passphrase prompt
-means that the TPM did not unlock the disk.
+If the reboot does not come back, try `ssh -t root@den.local
+systemd-tty-ask-password-agent`. A passphrase prompt means that the TPM did
+not unlock the disk.
 
 The root converge runs as the transient unit `den-apply-root`. If the SSH
 session drops, the converge continues. Reattach with
@@ -209,6 +225,12 @@ can be converged belongs to mgmt.**
 that uses argon2id, the cryptsetup default. Ubuntu's own encrypted install
 makes the same split. PCR 7 does not measure the kernel, so this does not
 change the accepted threat model.
+
+**Why the install sets up SSH unlock.** It is config that mgmt could
+converge, but the first boot needs it, and the first boot comes before the
+first `den apply`. The initramfs holds den's private host keys on the
+unencrypted `/boot`. They let a person with the disk pretend to be den, but
+not log in.
 
 **Root size.** The root partition uses `size: -1`, which Subiquity resolves to
 the rest of the disk. Only the last partition can do this. Bare curtin has no

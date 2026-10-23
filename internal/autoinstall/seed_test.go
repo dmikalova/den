@@ -2,6 +2,8 @@ package autoinstall
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -244,5 +246,64 @@ func TestCheckPinnedToOneDisk(t *testing.T) {
 				t.Error("want an error")
 			}
 		})
+	}
+}
+
+func TestUserDataInstallsInitrdUnlock(t *testing.T) {
+	s := Seed{
+		Hostname:       "den",
+		Username:       "dmikalova",
+		PasswordHash:   "$6$rounds=4096$salt$hash",
+		AuthorizedKeys: []string{"ssh-ed25519 AAAAC3Nz key@host"},
+		LUKSPassphrase: "correct horse battery staple",
+		HostKey:        testHostKey,
+	}
+
+	out, err := s.UserData()
+	if err != nil {
+		t.Fatalf("UserData: %v", err)
+	}
+	text := string(out)
+	install := strings.Index(text, "bash /tmp/den-initrd/install.sh")
+	hostKey := strings.Index(text, "/target/etc/ssh/ssh_host_ed25519_key")
+	subvols := strings.Index(text, "bash /tmp/den-subvols")
+	switch {
+	case install < 0:
+		t.Fatalf("user-data does not run the initrd install:\n%s", out)
+	case hostKey < 0 || install < hostKey:
+		t.Error("the initrd install runs before the host key is in place")
+	case subvols < install:
+		t.Error("the initrd install runs after the subvolume rebuild, which must be last")
+	}
+}
+
+func TestWriteInitrd(t *testing.T) {
+	dir := t.TempDir()
+	keys := []string{"ssh-ed25519 AAAA one", "ssh-ed25519 BBBB two"}
+	if err := writeInitrd(dir, keys); err != nil {
+		t.Fatalf("writeInitrd: %v", err)
+	}
+
+	for _, f := range []string{
+		"install.sh",
+		"45den-net/module-setup.sh",
+		"45den-net/10-den.network",
+		"45den-net/mdns.conf",
+		"46sshd/module-setup.sh",
+		"46sshd/sshd.service",
+		"46sshd/sshd_config",
+		"46sshd/motd",
+		"46sshd/profile",
+	} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("missing %s: %v", f, err)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "authorized_keys"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ssh-ed25519 AAAA one\nssh-ed25519 BBBB two\n"; string(got) != want {
+		t.Errorf("authorized_keys = %q, want %q", got, want)
 	}
 }

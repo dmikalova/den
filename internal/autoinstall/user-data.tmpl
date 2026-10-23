@@ -200,6 +200,12 @@ autoinstall:
     - curtin in-target --target=/target -- sh -c 'ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub'
     - |
       printf 'ssh_deletekeys: false\n' > /target/etc/cloud/cloud.cfg.d/99-den-ssh.cfg
+    # SSH unlock at the passphrase prompt, which the first boot always shows
+    # because the TPM is not enrolled yet. The initramfs takes the host keys
+    # above, so this must come after them. See initrd/README.md.
+    - cp -r {{ seedInitrd }} /target/tmp/den-initrd
+    - curtin in-target --target=/target -- bash /tmp/den-initrd/install.sh
+    - rm -rf /target/tmp/den-initrd
     # GRUB defaults and locales used to be written here. They are ordinary
     # config, not disk shape, so mgmt owns them now: see mgmt/main.mcl. A fresh
     # install boots with a 30 second recordfail pause and the wrong LC_TIME

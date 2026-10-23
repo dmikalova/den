@@ -86,6 +86,7 @@ func (s Seed) UserData() ([]byte, error) {
 		"seedHostKey": func() string {
 			return "/cdrom/" + SeedDir + "/" + HostKeyFile
 		},
+		"seedInitrd": func() string { return "/cdrom/" + SeedDir + "/" + InitrdDir },
 	}
 	t, err := template.New("user-data.tmpl").Funcs(funcs).ParseFS(templates, "user-data.tmpl")
 	if err != nil {

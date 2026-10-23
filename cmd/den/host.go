@@ -371,7 +371,7 @@ func (f hostFlags) rebootIfNeeded(
 	for {
 		if err := h.Wait(wait); err != nil {
 			return fmt.Errorf(
-				"den did not come back from the reboot, if its console asks for the LUKS passphrase the TPM did not unlock it: %w",
+				"den did not come back from the reboot, the TPM may not have unlocked it: try `ssh -t root@den.local systemd-tty-ask-password-agent`: %w",
 				err,
 			)
 		}
@@ -382,7 +382,7 @@ func (f hostFlags) rebootIfNeeded(
 		select {
 		case <-wait.Done():
 			return fmt.Errorf(
-				"den did not come back from the reboot, if its console asks for the LUKS passphrase the TPM did not unlock it: %w",
+				"den did not come back from the reboot, the TPM may not have unlocked it: try `ssh -t root@den.local systemd-tty-ask-password-agent`: %w",
 				wait.Err(),
 			)
 		case <-time.After(5 * time.Second):

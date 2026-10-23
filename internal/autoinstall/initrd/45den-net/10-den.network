@@ -1,0 +1,7 @@
+# Initrd only. Sorts before dracut's zzzz-dracut-default.network, so it wins.
+[Match]
+Name=en*
+
+[Network]
+DHCP=ipv4
+MulticastDNS=yes

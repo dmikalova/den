@@ -2,7 +2,9 @@ package autoinstall
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +23,13 @@ const KeyFile = "luks.key"
 // HostKeyFile holds den's SSH host key inside the seed directory, kept out of
 // user-data so the installer never copies it into its logs.
 const HostKeyFile = "ssh_host_ed25519_key"
+
+// InitrdDir holds the dracut modules for SSH unlock at boot, both in this
+// package and inside the seed directory. See initrd/README.md.
+const InitrdDir = "initrd"
+
+//go:embed initrd
+var initrdFS embed.FS
 
 // Remaster writes a copy of the source ISO that carries the seed and boots
 // straight into the install.
@@ -145,5 +154,35 @@ func writeSeed(work string, seed Seed) (string, error) {
 	if err := os.WriteFile(filepath.Join(dir, HostKeyFile), []byte(hostKey), 0o600); err != nil {
 		return "", err
 	}
+	if err := writeInitrd(filepath.Join(dir, InitrdDir), seed.AuthorizedKeys); err != nil {
+		return "", err
+	}
 	return dir, nil
+}
+
+// writeInitrd copies the embedded dracut modules out, with the keys that may
+// log in at the passphrase prompt.
+func writeInitrd(dir string, keys []string) error {
+	err := fs.WalkDir(initrdFS, InitrdDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		out := filepath.Join(dir, strings.TrimPrefix(path, InitrdDir))
+		if d.IsDir() {
+			return os.MkdirAll(out, 0o755)
+		}
+		b, err := initrdFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(out, b, 0o644)
+	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(
+		filepath.Join(dir, "authorized_keys"),
+		[]byte(strings.Join(keys, "\n")+"\n"),
+		0o644,
+	)
 }

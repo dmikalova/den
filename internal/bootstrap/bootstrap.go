@@ -199,6 +199,7 @@ check "the timezone is America/Los_Angeles" 'test "$(timedatectl show -p Timezon
 check "NTP is on" 'test "$(timedatectl show -p NTP --value)" = yes'
 check "den-tpm-enroll finished" '! systemctl is-enabled --quiet den-tpm-enroll.service && test ! -e /etc/den/luks.key'
 check "the TPM unlocks the root volume" 'grep -q tpm2-device=auto /etc/crypttab'
+check "the initramfs takes SSH unlock" 'lsinitrd "/boot/initrd.img-$(uname -r)" | grep -q "usr/sbin/sshd$"'
 check "no unit failed" 'test -z "$(systemctl --failed --plain --no-legend)"'
 if [ "$fail" -ne 0 ]; then
   systemctl --failed --plain --no-legend || true
