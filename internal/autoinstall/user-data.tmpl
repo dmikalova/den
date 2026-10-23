@@ -132,7 +132,7 @@ autoinstall:
 
       # An unknown crypttab option can leave the root volume unopenable, so
       # confirm the initramfs understands one before writing it.
-      if ! lsinitramfs "/boot/initrd.img-$(uname -r)" | grep -q systemd-cryptsetup; then
+      if ! lsinitramfs "/boot/initrd.img-$(uname -r)" | grep systemd-cryptsetup >/dev/null; then
         echo "this initramfs cannot unlock with a TPM: leaving crypttab alone"
         done_with_it
         exit 0
