@@ -72,13 +72,10 @@ admin can read it, so den itself never can.
 
 | Key                    | Use                                              |
 | ---------------------- | ------------------------------------------------ |
-| `PASSWORD`             | Console and sudo password. Short enough to type. |
-| `LUKS_PASSPHRASE`      | Unlocks the root volume. Long and random.        |
+| `PASSWORD`             | Console and sudo password                        |
+| `LUKS_PASSPHRASE`      | Unlocks the root volume                          |
 | `SSH_HOST_ED25519_KEY` | den's SSH host key, the same on every install    |
 | `GCP_KEY`              | den's service account key. `den apply` uses it.  |
-
-**Caution: keep `PASSWORD` and `LUKS_PASSPHRASE` different.** The LUKS
-passphrase is written in clear on the stick.
 
 Pass `--iso <path>` to use an ISO that you already have. Pass
 `--password-file` or `--luks-passphrase-file` to build without GCP.
