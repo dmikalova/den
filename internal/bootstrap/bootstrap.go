@@ -67,6 +67,7 @@ type Step struct {
 func Bootstrap(o Options) []Step {
 	steps := []Step{
 		{Name: "identify the host", Script: identify},
+		{Name: "check the install", Root: true, Script: checkInstall},
 		{Name: "install base packages", Root: true, Script: patch},
 		{
 			Name:   "install mgmt " + o.MgmtVersion,
@@ -81,7 +82,11 @@ func Bootstrap(o Options) []Step {
 			Script: fmt.Sprintf(installTerminfo, o.Terminfo),
 		})
 	}
-	return steps
+	return append(steps, Step{
+		Name:   "remove the installer's old root tree",
+		Root:   true,
+		Script: removeOldTree,
+	})
 }
 
 // ApplyRoot is the first half of the second pass: fetch the config repo and
@@ -172,6 +177,52 @@ printf 'kernel  %s\n' "$(uname -r)"
 arch=$(dpkg --print-architecture)
 printf 'arch    %s\n' "$arch"
 test "$arch" = amd64
+`
+
+// checkInstall stops bootstrap if the install did not take the shape den
+// expects. It runs before anything is installed, so a bad install is found
+// while it is still cheap to redo. The data drives are listed, not checked:
+// only the operator knows what they held before.
+const checkInstall = `set -euo pipefail
+fail=0
+check() {
+  if bash -c "$2" >/dev/null 2>&1; then
+    printf 'ok    %s\n' "$1"
+  else
+    printf 'FAIL  %s\n' "$1"
+    fail=1
+  fi
+}
+check "/ is the @ subvolume" 'findmnt -no OPTIONS / | grep -q "subvol=/@"'
+check "swap is /swap/swapfile" 'swapon --noheadings --show=NAME | grep -qx /swap/swapfile'
+check "the timezone is America/Los_Angeles" 'test "$(timedatectl show -p Timezone --value)" = America/Los_Angeles'
+check "NTP is on" 'test "$(timedatectl show -p NTP --value)" = yes'
+check "den-tpm-enroll finished" '! systemctl is-enabled --quiet den-tpm-enroll.service && test ! -e /etc/den/luks.key'
+check "the TPM unlocks the root volume" 'grep -q tpm2-device=auto /etc/crypttab'
+check "no unit failed" 'test -z "$(systemctl --failed --plain --no-legend)"'
+if [ "$fail" -ne 0 ]; then
+  systemctl --failed --plain --no-legend || true
+  journalctl -b -u den-tpm-enroll.service --no-pager | tail -n 20 || true
+fi
+echo
+lsblk -e 7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+exit "$fail"
+`
+
+// removeOldTree deletes the pre-subvolume tree that the installer leaves at
+// the top of the filesystem as a fallback. Bootstrap only reaches this step
+// once den has booted from @, so the fallback is no longer needed. Every
+// subvolume den makes starts with @, so a later run cannot touch them.
+const removeOldTree = `set -euo pipefail
+findmnt -no OPTIONS / | grep -q 'subvol=/@'
+top=$(mktemp -d)
+mount -o subvolid=5 /dev/mapper/den-root "$top"
+trap 'umount "$top"; rmdir "$top"' EXIT
+if [ -z "$(find "$top" -mindepth 1 -maxdepth 1 ! -name '@*' -print -quit)" ]; then
+  echo "nothing to remove"
+  exit 0
+fi
+find "$top" -mindepth 1 -maxdepth 1 ! -name '@*' -printf 'removing %f\n' -exec rm -rf {} +
 `
 
 // patch installs only what the rest of bootstrap needs: curl fetches the mgmt

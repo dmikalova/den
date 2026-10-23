@@ -76,16 +76,6 @@ func TestNewRejectsAMissingClient(t *testing.T) {
 	}
 }
 
-func TestDeviceIPv4SkipsIPv6(t *testing.T) {
-	d := Device{Addresses: []string{"fd7a:115c:a1e0::a028:192f", "100.65.25.45"}}
-	if got := d.IPv4(); got != "100.65.25.45" {
-		t.Errorf("IPv4 = %q, want 100.65.25.45", got)
-	}
-	if got := (Device{Addresses: []string{"fd7a:115c:a1e0::1"}}).IPv4(); got != "" {
-		t.Errorf("IPv4 of an IPv6-only device = %q, want empty", got)
-	}
-}
-
 func TestSetIPv4PostsTheAddress(t *testing.T) {
 	var gotPath, gotType string
 	var gotBody map[string]string

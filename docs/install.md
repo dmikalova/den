@@ -23,25 +23,16 @@ sudo den usb write --image ~/Downloads/den-autoinstall.iso --device /dev/diskN -
 # 3. Boot den from the stick. Wait for it to reboot.
 # 4. Type the LUKS passphrase on den's console, once.
 
-# 5. Check the install
-ssh dmikalova@den.local
-lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
-systemctl --failed
-findmnt -no SOURCE,OPTIONS / && swapon --show
-timedatectl && date
-systemctl status den-tpm-enroll.service
-sudo reboot            # must come back with no passphrase prompt
-
-# 6. Configure den
+# 5. Configure den
 den bootstrap
 den apply
 
-# 7. Check den
+# 6. Check den
 ssh dmikalova@den.local sudo den notify --title install "den is up"
 ssh dmikalova@den.local sudo systemctl start --wait kopia-backup.service
 den check
 
-# 8. Erase the USB stick
+# 7. Erase the USB stick
 sudo diskutil zeroDisk /dev/diskN
 ```
 
@@ -97,83 +88,72 @@ candidates. It then reboots.
 
 ### 4. Unlock once
 
-The first boot asks for the LUKS passphrase on the console. From the second
-boot, the TPM unlocks the disk.
+The first boot asks for the LUKS passphrase on the console. During that boot,
+`den-tpm-enroll.service` binds a LUKS key slot to TPM PCR 7 and shreds the
+copy of the passphrase that the installer left in `/etc/den/luks.key`. From
+the next boot, the TPM unlocks the disk.
 
-### 5. Check the install
+**Keep the LUKS passphrase in Bitwarden.** A firmware update changes PCR 7,
+and then den asks for the passphrase again.
 
-den answers to `den.local` over mDNS. You do not need an SSH config entry.
+### 5. Configure den
+
+den answers to `den.local` over mDNS, so you do not need an SSH config entry.
 If mDNS does not answer, get the address from the console with
-`ip -4 -br addr`.
+`ip -4 -br addr` and pass `--host dmikalova@<address>`. Off the LAN, pass
+`--host den` to go through Tailscale.
 
 SSH does not ask about the host key, because every install has the same key:
 `SHA256:iSvJqB6Q5lDwLQ30xz9bZhsKbvoYJA38rS5jz3jurcU`. **If SSH warns that the
 host key changed, stop.** The install did not take the key. Find out why
 before you accept anything.
 
-Make sure that:
+`den bootstrap` runs once. In order, it:
 
-- `lsblk` shows the four data drives as they were: empty on a first install,
-  with their filesystems on a reinstall.
-- `systemctl --failed` shows no units.
-- `findmnt` shows `subvol=/@`, and `swapon` shows `/swap/swapfile`.
-- `timedatectl` shows `America/Los_Angeles` with NTP active, and `date` shows
-  a 24 hour time.
-- `den-tpm-enroll.service` succeeded.
-- den reboots with no passphrase prompt.
-
-`den-tpm-enroll.service` runs once. It binds a LUKS key slot to TPM PCR 7 and
-shreds the passphrase that the installer left in `/etc/den/luks.key`. If there
-is no usable TPM, it logs that and leaves the passphrase as the only unlock.
-If it fails for an unexpected reason, it keeps the key file and tries again
-on the next boot.
-
-**Keep the LUKS passphrase in Bitwarden.** A firmware update changes PCR 7,
-and then den asks for the passphrase again.
-
-The installer leaves the pre-subvolume tree at the top level of the
-filesystem as a fallback. After the reboot works, delete it:
-
-```sh
-sudo mkdir -p /mnt/top
-sudo mount -o subvolid=5 /dev/mapper/den-root /mnt/top
-ls /mnt/top                     # expect @, @swap, and the old tree
-sudo find /mnt/top -mindepth 1 -maxdepth 1 ! -name @ ! -name @swap -exec rm -rf {} +
-sudo umount /mnt/top && sudo rmdir /mnt/top
-```
-
-### 6. Configure den
-
-`den bootstrap` runs once. It patches the system, installs the pinned mgmt
-release and checks it against the published sums, and copies your terminal
-description to den. Steps that need root ask for the sudo password.
+1. Checks the install, and stops if any check fails:
+   - `/` is the `@` subvolume, and swap is `/swap/swapfile`.
+   - The timezone is `America/Los_Angeles`, and NTP is on.
+   - `den-tpm-enroll.service` finished, and `/etc/crypttab` unlocks with the
+     TPM.
+   - No unit failed.
+2. Lists the disks. Make sure that the four data drives are as they were:
+   empty on a first install, with their filesystems on a reinstall.
+3. Patches the system, installs the pinned mgmt release, and checks it
+   against the published sums.
+4. Copies your terminal description to den.
+5. Deletes the tree that the installer leaves at the top of the filesystem.
+   den now boots from `@`, so that fallback is not necessary.
 
 `den apply` is safe to run at any time. In order, it:
 
 1. Clones or pulls `/srv/den-config` from GitHub. Push before you apply.
 2. Converges the root layer, `mgmt/main.mcl`.
 3. Joins the tailnet with the `tailscale-den` OAuth client and `tag:den`.
-4. Seals `GCP_KEY` to the TPM, so den can fetch its own secrets.
-5. Reboots if a package or the NVIDIA module needs it, and waits.
-6. Converges the user layer, `mgmt/user/main.mcl`.
+4. Sets den's tailnet IPv4 to `100.64.0.1`.
+5. Seals `GCP_KEY` to the TPM, so den can fetch its own secrets.
+6. Reboots if a package or the NVIDIA module needs it, and waits. The first
+   apply reboots for the NVIDIA driver, which also proves that the TPM
+   unlocks the disk.
+7. Converges the user layer, `mgmt/user/main.mcl`.
 
 **Do not run `tailscale up` by hand.** Tailscale is not installed until step
 2.
 
 On a reinstall, step 3 deletes the old, disconnected `den` node, so the new
-node takes the name `den` and not `den-1`. It then gives the new node the old
-node's IPv4 address, so the `*.den.mklv.tech` records stay correct. If that
-step warns, apply `den/dns` in the infrastructure repo.
+node takes the name `den` and not `den-1`. Step 4 then gives it the fixed
+address that the `*.den.mklv.tech` records point to. The infrastructure repo
+sets the same address in `den/dns`. If you change it, change both. If step 4
+warns, set the address in the Tailscale admin console.
+
+If the reboot does not come back, look at den's console. A passphrase prompt
+means that the TPM did not unlock the disk.
 
 The root converge runs as the transient unit `den-apply-root`. If the SSH
 session drops, the converge continues. Reattach with
 `journalctl -fu den-apply-root`. If the package step hangs, read
 `/var/log/den/apply-<time>.watch`.
 
-Both commands use `dmikalova@den.local`. Off the LAN, pass `--host den` to go
-through Tailscale.
-
-### 7. Check den
+### 6. Check den
 
 `den notify` must reach Discord. If it does not, nothing later tells you
 when something breaks. Fix it before you continue. `den notify` needs root,
@@ -184,7 +164,7 @@ The kopia run connects den to the existing B2 repository. Without it, the
 
 `den check` makes 23 assertions in one SSH round trip. It is the signoff.
 
-### 8. Erase the USB stick
+### 7. Erase the USB stick
 
 The stick holds the LUKS passphrase in clear.
 
@@ -218,8 +198,8 @@ The seed:
   LUKS2 volume that holds btrfs.
 - Creates one account: password login on the console, key-only login over
   SSH.
-- Sets `America/Los_Angeles` and `LC_TIME=en_DK.UTF-8`, for a 24 hour clock
-  and ISO 8601 dates.
+- Sets the timezone to `America/Los_Angeles`. mgmt sets
+  `LC_TIME=en_DK.UTF-8` later, for a 24 hour clock and ISO 8601 dates.
 - Installs `curl`, `git` and `gnupg`, and nothing else. mgmt does the rest.
 
 Rule: **anything that shapes the disk belongs to the install. Anything that

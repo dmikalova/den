@@ -1,8 +1,7 @@
 // Package tailnet talks to the Tailscale API with den's OAuth client. It does
 // the steps den cannot do for itself on a reinstall: removing the node the old
 // install left behind, so the new one enrols as den rather than den-1, and
-// moving the old node's IPv4 to the new one, so every record that points at
-// den stays correct.
+// setting den's fixed IPv4, so every record that points at den stays correct.
 package tailnet
 
 import (
@@ -13,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -38,18 +36,7 @@ type Device struct {
 	Hostname           string   `json:"hostname"`
 	Name               string   `json:"name"`
 	Tags               []string `json:"tags"`
-	Addresses          []string `json:"addresses"`
 	ConnectedToControl bool     `json:"connectedToControl"`
-}
-
-// IPv4 is the device's tailnet IPv4 address, or "" if it has none.
-func (d Device) IPv4() string {
-	for _, a := range d.Addresses {
-		if ip, err := netip.ParseAddr(a); err == nil && ip.Is4() {
-			return a
-		}
-	}
-	return ""
 }
 
 // New exchanges the client credentials for an access token. The secret is a

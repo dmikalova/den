@@ -191,11 +191,14 @@ func (f hostFlags) tailnetAuth(
 	return auth
 }
 
-// enrol joins den to the tailnet unless it is already on it. A tailscaled with
-// no node identity means a fresh install, and the previous install's node is
-// still registered under den, so it is removed first or this one enrols as
-// den-1 and every name pointing at den reaches the dead node. The new node
-// then takes the old node's IPv4, so the DNS records need no change.
+// tailnetIPv4 is den's fixed tailnet address. The den/dns stack in the
+// infrastructure repo publishes the same address, so keep the two in step.
+const tailnetIPv4 = "100.64.0.1"
+
+// enrol joins den to the tailnet unless it is already on it, then makes sure
+// den holds tailnetIPv4. A tailscaled with no node identity means a fresh
+// install, and the previous install's node is still registered under den, so
+// it is removed first or this one enrols as den-1 and keeps the address.
 func (f hostFlags) enrol(
 	ctx context.Context,
 	h remote.Host,
@@ -215,25 +218,31 @@ func (f hostFlags) enrol(
 	if err != nil {
 		return err
 	}
-	switch state.BackendState {
-	case "Running":
-		_, err := fmt.Fprintln(stdout, "\nalready on the tailnet")
-		return err
-	case "":
+	if state.BackendState == "" {
 		_, err := fmt.Fprintln(stdout, "\ntailscale is not installed yet, skipping the join")
 		return err
 	}
 
-	var client *tailnet.Client
-	var oldIPv4 string
-	if state.BackendState == "NeedsLogin" || state.BackendState == "NoState" {
-		client, oldIPv4 = f.removeStaleNode(ctx, h, auth, stdout, stderr)
+	client, err := tailnet.New(ctx, tailnet.DefaultBaseURL, auth.id, auth.secret)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "could not reach the Tailscale API: %v\n", err)
 	}
-	if err := bootstrap.Run(ctx, h, join, stdout); err != nil {
-		return err
+
+	if state.BackendState == "Running" {
+		if _, err := fmt.Fprintln(stdout, "\nalready on the tailnet"); err != nil {
+			return err
+		}
+	} else {
+		if client != nil &&
+			(state.BackendState == "NeedsLogin" || state.BackendState == "NoState") {
+			f.removeStaleNode(ctx, h, client, stdout, stderr)
+		}
+		if err := bootstrap.Run(ctx, h, join, stdout); err != nil {
+			return err
+		}
 	}
-	if client != nil && oldIPv4 != "" {
-		keepIPv4(ctx, h, client, oldIPv4, stdout, stderr)
+	if client != nil {
+		pinIPv4(ctx, h, client, stdout, stderr)
 	}
 	return nil
 }
@@ -259,21 +268,19 @@ func readTailnetState(ctx context.Context, h remote.Host) (tailnetState, error) 
 	return state, nil
 }
 
-// keepIPv4 moves the old node's IPv4 to the node that just joined. A failure
-// only warns: den works on the new address, but the den/dns stack in the
-// infrastructure repo then has to be applied to follow it.
-func keepIPv4(
+// pinIPv4 gives den tailnetIPv4 if it does not already hold it. A failure only
+// warns: den works on any address, but *.den.mklv.tech does not reach it.
+func pinIPv4(
 	ctx context.Context,
 	h remote.Host,
 	client *tailnet.Client,
-	ipv4 string,
 	stdout, stderr io.Writer,
 ) {
 	warn := func(err error) {
 		_, _ = fmt.Fprintf(
 			stderr,
-			"could not keep den's tailnet address %s, apply den/dns in the infrastructure repo: %v\n",
-			ipv4,
+			"could not give den its tailnet address %s, set it in the Tailscale admin console: %v\n",
+			tailnetIPv4,
 			err,
 		)
 	}
@@ -282,28 +289,27 @@ func keepIPv4(
 		warn(err)
 		return
 	}
-	if slices.Contains(state.Self.TailscaleIPs, ipv4) {
+	if slices.Contains(state.Self.TailscaleIPs, tailnetIPv4) {
 		return
 	}
 	if state.Self.ID == "" {
 		warn(errors.New("tailscaled reported no node ID"))
 		return
 	}
-	_, _ = fmt.Fprintf(stdout, "moving den's tailnet address back to %s\n", ipv4)
-	if err := client.SetIPv4(ctx, state.Self.ID, ipv4); err != nil {
+	_, _ = fmt.Fprintf(stdout, "setting den's tailnet address to %s\n", tailnetIPv4)
+	if err := client.SetIPv4(ctx, state.Self.ID, tailnetIPv4); err != nil {
 		warn(err)
 	}
 }
 
-// removeStaleNode deletes the disconnected namesakes of this host and returns
-// the client and the IPv4 of the first one deleted, for keepIPv4. A failure
+// removeStaleNode deletes the disconnected namesakes of this host. A failure
 // only warns: the join still works, it just lands as den-1.
 func (f hostFlags) removeStaleNode(
 	ctx context.Context,
 	h remote.Host,
-	auth tailnetAuth,
+	client *tailnet.Client,
 	stdout, stderr io.Writer,
-) (*tailnet.Client, string) {
+) {
 	warn := func(err error) {
 		_, _ = fmt.Fprintf(
 			stderr,
@@ -314,30 +320,19 @@ func (f hostFlags) removeStaleNode(
 	hostname, err := h.Capture(ctx, "hostname")
 	if err != nil {
 		warn(err)
-		return nil, ""
-	}
-	client, err := tailnet.New(ctx, tailnet.DefaultBaseURL, auth.id, auth.secret)
-	if err != nil {
-		warn(err)
-		return nil, ""
+		return
 	}
 	devices, err := client.Devices(ctx)
 	if err != nil {
 		warn(err)
-		return nil, ""
+		return
 	}
-	var ipv4 string
 	for _, d := range tailnet.Stale(devices, hostname, *f.tsTag) {
 		_, _ = fmt.Fprintf(stdout, "removing the stale tailnet node %s (%s)\n", d.Name, d.NodeID)
 		if err := client.Delete(ctx, d.NodeID); err != nil {
 			warn(err)
-			continue
-		}
-		if ipv4 == "" {
-			ipv4 = d.IPv4()
 		}
 	}
-	return client, ipv4
 }
 
 // rebootIfNeeded reboots den and waits for it to come back on a new boot. It
@@ -375,7 +370,10 @@ func (f hostFlags) rebootIfNeeded(
 	start := time.Now()
 	for {
 		if err := h.Wait(wait); err != nil {
-			return fmt.Errorf("den did not come back from the reboot: %w", err)
+			return fmt.Errorf(
+				"den did not come back from the reboot, if its console asks for the LUKS passphrase the TPM did not unlock it: %w",
+				err,
+			)
 		}
 		if now, err := h.Capture(wait, bootstrap.BootID); err == nil && now != "" && now != before {
 			_, err := fmt.Fprintf(stdout, "back in %s\n", time.Since(start).Round(time.Second))
@@ -383,7 +381,10 @@ func (f hostFlags) rebootIfNeeded(
 		}
 		select {
 		case <-wait.Done():
-			return fmt.Errorf("den did not come back from the reboot: %w", wait.Err())
+			return fmt.Errorf(
+				"den did not come back from the reboot, if its console asks for the LUKS passphrase the TPM did not unlock it: %w",
+				wait.Err(),
+			)
 		case <-time.After(5 * time.Second):
 		}
 	}
