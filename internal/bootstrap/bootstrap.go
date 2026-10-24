@@ -201,6 +201,12 @@ test "$arch" = amd64
 // while it is still cheap to redo. The data drives are listed, not checked:
 // only the operator knows what they held before.
 const checkInstall = `set -euo pipefail
+export SYSTEMD_PAGER=
+# The first boot enrolls the TPM in a unit that multi-user.target pulls in, and
+# ssh answers before that unit ends. Wait for the boot to finish, so the
+# checks do not race it. A degraded boot also ends the wait; the checks report
+# it.
+timeout 600 systemctl is-system-running --wait >/dev/null 2>&1 || true
 fail=0
 check() {
   if bash -c "$2" >/dev/null 2>&1; then
@@ -219,7 +225,7 @@ check "the TPM unlocks the root volume" 'grep -q tpm2-device=auto /etc/crypttab'
 check "the initramfs takes SSH unlock" 'lsinitrd "/boot/initrd.img-$(uname -r)" | grep -q "usr/sbin/sshd$"'
 check "no unit failed" 'test -z "$(systemctl --failed --plain --no-legend)"'
 if [ "$fail" -ne 0 ]; then
-  systemctl --failed --plain --no-legend || true
+  systemctl --failed --plain --no-legend --no-pager || true
   journalctl -b -u den-tpm-enroll.service --no-pager | tail -n 20 || true
 fi
 echo
