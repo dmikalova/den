@@ -44,26 +44,16 @@ jobs:
       # release is newest for a while before it carries the binary. Resolved
       # with curl rather than gh, which this container does not have.
       - name: install mgmt
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # bootstrap.go is the one place the version is declared.
+          # bootstrap.go is the one place the version and its release are declared.
           want=$(grep -oP 'DefaultMgmtVersion = "\K[^"]+' internal/bootstrap/bootstrap.go)
+          tag=$(grep -oP 'mgmtRelease = "\K[^"]+' internal/bootstrap/bootstrap.go)
           bin=mgmt-linux-amd64-${want}
-          found=
-          tags=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=20" |
-            grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/')
-          for tag in $tags; do
-            base=https://github.com/${GITHUB_REPOSITORY}/releases/download/$tag
-            if curl -fsSL -o "$bin" "$base/$bin" && curl -fsSL -o mgmt-SHA256SUMS "$base/mgmt-SHA256SUMS"; then
-              found=$tag
-              break
-            fi
-          done
-          [ -n "$found" ] || { echo "no den release carries $bin" >&2; exit 1; }
-          echo "mgmt $want from den $found"
+          base=https://github.com/${GITHUB_REPOSITORY}/releases/download/$tag
+          curl -fsSL -o "$bin" "$base/$bin"
+          curl -fsSL -o mgmt-SHA256SUMS "$base/mgmt-SHA256SUMS"
+          echo "mgmt $want from den $tag"
           grep "  $bin\$" mgmt-SHA256SUMS | sha256sum -c -
           install -m 0755 "$bin" /usr/local/bin/mgmt
           rm -f "$bin" mgmt-SHA256SUMS
