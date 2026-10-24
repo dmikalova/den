@@ -305,6 +305,72 @@ To lock the home folder again, do these steps:
    `sudo podman run --rm --network none localhost/ecryptfs-tools keyctl clear @u`.
 4. Remove the image: `sudo podman rmi localhost/ecryptfs-tools`.
 
+## The old /mnt/data pool
+
+The old server `dmikalova-server` (Ubuntu 18.04, 2016-03 to 2019-09) had a
+btrfs pool at `/mnt/data`. The pool held `Plex`, `Torrents`, `Dropbox` and
+`mess`. The links in the old home folder point there.
+
+| | |
+| --- | --- |
+| Label | `data` |
+| UUID | `1571af3f-0838-4463-bc1e-0939ab88eb75` |
+| Size | 4 devices, 11.0 TB in total, 5.03 TiB used |
+| Mount options | `noatime,autodefrag,compress-force=zlib,space_cache` |
+| Last mount | 2019-09-07, transid 128763 on all 4 devices, so the pool was consistent |
+| SYSTEM chunks | RAID1 on devid 1 and devid 2 |
+| Data and metadata profile | unknown; read it with `btrfs filesystem df` after the pool mounts |
+
+The members come from the old server's records. The SSD image holds them:
+`/var/lib/smartmontools/` names each drive by model and serial, and the
+2019-09-07 boot in `/var/log/kern.log` maps each devid to a `/dev/sdX` and a
+model.
+
+| devid | Old name | Drive | Serial | dev_uuid | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | not found yet |
+| 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | not found yet |
+| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | unknown | not found yet |
+| 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
+
+Notes:
+
+- The two Seagates are the same model. Their superblocks give the devid.
+- devid 2 had 1 write error and 12 read errors on its btrfs counters at the
+  last boot. Image it with care, and keep the ddrescue map.
+- The ST3000DM001 has a high failure rate. Image each Seagate before you do
+  anything else with it.
+- At least one of devid 1 and devid 2 is necessary to read the chunk tree.
+  How many of the 4 devices are necessary for the data depends on the data
+  profile.
+- These drives were in the server only in 2016-03, and are not in the pool:
+  Seagate ST3000DM001 `Z50055EX`, `Z5006GSW` and `Z5006P1Z` (until
+  2016-03-28), and WD Green WD15EADS 1.5 TB `WD-WMAVU0785064` (until
+  2016-03-19). They can hold older data from before the pool.
+- The Toshiba from the Canvio Desk was never in this server.
+
+To identify a drive, attach it and run:
+
+```bash
+sudo smartctl -i /dev/sdX | grep -E 'Model|Serial'
+sudo btrfs inspect-internal dump-super /dev/sdX | grep -E '^(label|fsid)|dev_item.(devid|uuid)'
+```
+
+Image each member to its own directory under `recover/`. Put the images on
+different branches, because the 4 images are 11 TB in total. Use `ddrescue
+-S`, so the never-written areas take no space.
+
+When all the members that you can find are imaged, do these steps:
+
+1. Make a reflink `work.img` of each image.
+2. Attach each one read-only: `sudo losetup -r -f --show work.img`.
+3. Scan for the devices: `sudo btrfs device scan`.
+4. Mount the pool:
+   `sudo mount -o ro,rescue=nologreplay,degraded /dev/loopN /mnt/olddata`.
+   Use `degraded` only if a member is missing.
+5. Read the profiles: `sudo btrfs filesystem df /mnt/olddata`.
+6. Continue at step 7 of the steps above.
+
 ## Drive log
 
 ### sde-toshiba-85UT1EVAS
@@ -344,6 +410,50 @@ Status:
   Image it again through that board, into a new directory. That image is
   plaintext. Then delete the ciphertext image.
 
+### ssd-ocz-vertex3-TF917I2JJP0YN2ST
+
+| | |
+| --- | --- |
+| Drive | OCZ Vertex 3, 120 GB SSD, serial `OCZ-TF917I2JJP0YN2ST` |
+| Adapter | ASMedia USB 3.0 bridge (`ASMT USB 3.0 Destop H`) |
+| SMART | passed; 27,453 power-on hours, 0 uncorrectable, 1 reallocation event, 9.4 TiB written |
+| Image | `/mnt/disk1/data/recover/ssd-ocz-vertex3-TF917I2JJP0YN2ST/image.img`, SHA-256 in `image.img.sha256` |
+| Restore | `~/data/restore/ssd-ocz-vertex3-TF917I2JJP0YN2ST/` |
+
+Findings:
+
+- The OS root drive of `dmikalova-server`. Ubuntu 18.04, installed 2016-03,
+  last write 2019-09.
+- GPT: EFI partition, ext2 `/boot`, and LVM volume group
+  `dmikalova-server-vg` with `root` (ext4, 79 GB) and `swap_1`. No disk
+  encryption. Swap was encrypted with `cryptswap1`.
+- The home folder is ecryptfs, 23 GB. The old login password unwrapped the
+  key. See [ecryptfs home folders](#ecryptfs-home-folders).
+- `~/Plex`, `~/Dropbox`, `~/Torrents` and `~/mess` are links to the old
+  `/mnt/data` pool. The media is not on this drive.
+- `/var/lib/smartmontools/` and `/var/log/kern.log*` list the drives of the
+  old pool. See [The old /mnt/data pool](#the-old-mntdata-pool).
+- Data of interest: `Documents` (Enpass and Anki), `Downloads` (PDFs such as
+  a loan agreement and an insurance card), `code`, `go/src`, `.ssh`,
+  `.gnupg`, `.bash_history`, `.config`, `.mozilla` and `.factorio`.
+
+Restored to `~/data/restore/ssd-ocz-vertex3-TF917I2JJP0YN2ST/`:
+
+- `home/`: 195,642 files, 7.9 GB. Not copied: `.cache`, `.steam`, `.npm`,
+  `.vscode`, `.dropbox`, `.dropbox-dist`, `snap`, Steam and the trash.
+  Verified with an rsync `--checksum` dry run: no differences.
+- `plex-databases/`: the Plex library database. 470 media files, and the
+  watch history.
+- `deluge/`: `/var/lib/deluge`, with 1,080 `.torrent` files.
+
+Status:
+
+- 2026-10-24: imaged 120 GB, 0 read errors, 12 minutes. Restored and
+  verified. Locked the home folder, cleared the keys, deleted `work.img`.
+- Next: look through the restore directory. Move what you keep to
+  `~/data/mess/`. Then delete the image, or keep it for the old system
+  files.
+
 ### sde-wd-WMC0S1089686
 
 | | |
@@ -351,31 +461,46 @@ Status:
 | Drive | WD Green WD10EARX, 1 TB, serial `WD-WMC0S1089686` |
 | Adapter | ASMedia USB 3.0 bridge (`ASMT USB 3.0 Destop H`) |
 | SMART | passed; 24,723 power-on hours, 98 power cycles, 0 reallocated, 0 pending |
+| Image | `/mnt/disk2/data/recover/sde-wd-WMC0S1089686/image.img` (sparse) |
+| Files | `smart-before.txt`, `btrfs-super.txt` (the full superblock with `dump-super -f`) |
 
 Findings:
 
 - No partition table. The whole drive is one btrfs device.
-- This is devid 4 of the old `/mnt/data` pool: label `data`, UUID
-  `1571af3f-0838-4463-bc1e-0939ab88eb75`. The pool has 4 devices, 11.0 TB
-  in total and 5.03 TiB used. This drive holds 639 GiB of chunks.
-- The SYSTEM chunks are RAID1 on devid 1 and devid 2 only. Without one of
-  those two drives, btrfs cannot read the chunk tree, and the pool does not
-  mount.
-- The missing devices:
-
-  | devid | dev_uuid |
-  | --- | --- |
-  | 1 | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` |
-  | 2 | `afd881a8-b886-4e15-ac86-2f7aea78d500` |
-  | 3 | unknown |
-
+- devid 4 of the old `/mnt/data` pool. See
+  [The old /mnt/data pool](#the-old-mntdata-pool). This drive holds 639 GiB
+  of chunks.
+- The pool does not mount from this drive alone. The SYSTEM chunks are on
+  devid 1 and devid 2 only, so btrfs cannot read the chunk tree.
 - The pool used `compress-force=zlib`, so file carving from one device gives
   little.
 
 Status:
 
-- 2026-10-24: superblock analysis only. Not imaged.
-- Next: find the other members. On each candidate drive, run
-  `sudo btrfs inspect-internal dump-super /dev/sdX | grep -E 'fsid|devid'`.
-  Image each member. Then attach all images and mount the pool with
-  `-o ro,rescue=nologreplay`.
+- 2026-10-24: started the image with the `recover-wd1tb` unit. It takes
+  about 2 h 20 min.
+- Next: check that the map shows 100% rescued. Seal the image with
+  `sha256sum` and `chmod 444`. Then attach the next pool member.
+
+### sdf-sdcard-512gb
+
+| | |
+| --- | --- |
+| Drive | SD card, 512 GB, exFAT, 288 GiB used |
+| Reader | NORELSYS 1081 USB card reader |
+| Copy | `~/data/mess/sd-card-512gb/` |
+
+Findings:
+
+- A healthy card. `backup/` has 7,320 files: music, Keymander, taxes,
+  images, scripts and Ableton projects.
+- The card reads at only about 3 MB/s. The Mac SD slot and the USB reader
+  give the same speed, so the limit is the card.
+- No image. The card is healthy, and the files go to `mess` directly.
+
+Status:
+
+- 2026-10-24: started at 13:44 with the `copy-sdcard` unit:
+  `rsync -rt` from `/mnt/sdcard` (mounted `ro`). It takes about 23 h.
+- Next: verify with `rsync -rt --dry-run --checksum --itemize-changes`.
+  Then `sudo umount /mnt/sdcard` and remove the card.
