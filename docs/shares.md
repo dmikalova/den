@@ -9,9 +9,16 @@ is a container in name only.
 Shares are on the tailnet and nowhere else. Two things make that true, and
 either one alone would do:
 
-- `smbd` binds `lo` and `tailscale0`. It does not listen on the LAN interface.
 - `ufw` denies inbound from the LAN except ssh and mDNS, and allows everything
   in on `tailscale0`.
+- `smbd` has `hosts allow` set to loopback and the Tailscale ranges
+  (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`), and refuses every other peer.
+
+`smbd` listens on all addresses. It cannot use `bind interfaces only`, because
+Samba does not bind an interface without the broadcast flag, and `tailscale0`
+is a point-to-point tun device that does not have it. With
+`interfaces = lo tailscale0`, `smbd` listens on loopback only and every client
+gets "connection refused".
 
 SMB3 is the minimum protocol and encryption is required, so a session that
 cannot encrypt does not connect. There is no guest access and no NetBIOS;

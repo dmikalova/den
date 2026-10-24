@@ -855,7 +855,7 @@ exec "kopia-units-v3" {
 # array, and a container that bind mounts the whole array to re-export it is a
 # container in name only.
 #
-# It listens on the tailnet alone. There is no LAN share and no guest access,
+# It serves the tailnet alone. There is no LAN share and no guest access,
 # which is also why the Time Machine target can sit on the same host.
 file "/etc/samba/smb.conf" {
 	state => "exists",
@@ -906,6 +906,19 @@ exec "samba-units-v2" {
 	creates => "/var/lib/den/samba-units-v2",
 
 	Depend => File["/etc/systemd/system/smbd.service.d/10-den-storage.conf"],
+}
+
+# smbd opens its listening sockets at start, so a running smbd keeps the old
+# loopback-only sockets until it restarts. try-restart, because on a new
+# install smbd is not running yet and must not start before the password is.
+exec "samba-listen-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
+	cmd => "systemctl try-restart smbd.service && touch /var/lib/den/samba-listen-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/samba-listen-v1",
+
+	Depend => Exec["samba-units-v2"],
 }
 
 # The front door.

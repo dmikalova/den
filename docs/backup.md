@@ -30,8 +30,10 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | `node_modules/`, `.terraform/` | no | anywhere; reinstalled from a lockfile |
 
 The exclusions live in [mgmt/files/usr/local/bin/den-kopia](../mgmt/files/usr/local/bin/den-kopia).
-Remove the `/mnt/storage/recover` rule once the extraction is finished. The
-extraction procedure is in [restore.md](restore.md).
+The `/mnt/storage/recover` rule is temporary. SnapRAID also excludes
+`/recover/` in [snapraid.conf](../mgmt/files/etc/snapraid.conf). Remove both
+rules when the extraction is finished. The extraction procedure and the
+cleanup steps are in [restore.md](restore.md).
 
 `/srv/dumps` is the `@dumps` subvolume on the NVMe, beside `@appdata`. A
 snapshot of a running database in `/srv/appdata` is only crash consistent. A

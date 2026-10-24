@@ -206,8 +206,9 @@ Do these in this sequence:
 3. Restore one file from the new snapshot. See
    [backup.md](backup.md#restore-a-file).
 4. Delete `work.img`. Keep `disk.img` until you no longer need the old drive.
-5. When `~/data/recover` is empty, remove the `/recover/` ignore rule from
-   `den-kopia`.
+5. When `~/data/recover` is empty, remove both `/recover/` rules: the ignore
+   rule in `den-kopia` and the exclude in `snapraid.conf`. Without this, files
+   that you put in a `recover` folder later get no backup and no parity.
 
 ## Encrypted drives
 

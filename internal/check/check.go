@@ -75,9 +75,14 @@ func List(user string) []Check {
 			`sudo -n sh -c 'ls -A /etc/den/healthcheck 2>/dev/null | grep -q .'`,
 		},
 
-		// smbd binds tailscale0, so it fails to start when the tailnet is not
-		// up. Active therefore means both things are true.
+		// Active is not enough: an smbd that listens on loopback alone is
+		// active and unreachable, which is how bind interfaces only with
+		// tailscale0 failed.
 		{"samba running", `systemctl is-active smbd`},
+		{
+			"samba listening beyond loopback",
+			`ss -Htln 'sport = :445' | grep -qvE '127\.0\.0\.1|\[::1\]'`,
+		},
 
 		{"proxy running", `systemctl is-active caddy`},
 		{"proxy answering", `curl -fsS -o /dev/null http://127.0.0.1/`},
