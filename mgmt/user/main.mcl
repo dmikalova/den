@@ -19,8 +19,14 @@ import "deploy"
 # No mode on the directories. Setting one makes the resource flap: mgmt chmods,
 # sees its own change, and chmods again, several times a second for the life of
 # the run. The default a fresh directory gets is already 0755.
+file "/home/dmikalova/.config/" {
+	state => "exists",
+}
+
 file "/home/dmikalova/.config/containers/" {
 	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/"],
 }
 
 file "/home/dmikalova/.config/containers/systemd/" {
