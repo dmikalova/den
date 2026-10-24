@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // ubuntuGrubCfg is the shape Ubuntu Server ships: a timeout, and one live
@@ -275,6 +277,51 @@ func TestUserDataInstallsInitrdUnlock(t *testing.T) {
 	case subvols < install:
 		t.Error("the initrd install runs after the subvolume rebuild, which must be last")
 	}
+}
+
+func TestWaitDriverDropInMatchesMgmt(t *testing.T) {
+	const path = "/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf"
+	want, err := os.ReadFile(filepath.Join("..", "..", "mgmt", "files", path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Seed{
+		Hostname:       "den",
+		Username:       "dmikalova",
+		PasswordHash:   "$6$rounds=4096$salt$hash",
+		AuthorizedKeys: []string{"ssh-ed25519 AAAAC3Nz key@host"},
+		LUKSPassphrase: "correct horse battery staple",
+		HostKey:        testHostKey,
+	}
+	out, err := s.UserData()
+	if err != nil {
+		t.Fatalf("UserData: %v", err)
+	}
+
+	var doc struct {
+		Autoinstall struct {
+			LateCommands []string `yaml:"late-commands"`
+		} `yaml:"autoinstall"`
+	}
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range doc.Autoinstall.LateCommands {
+		_, body, ok := strings.Cut(cmd, path+" <<'UNIT'\n")
+		if !ok {
+			continue
+		}
+		got, _, _ := strings.Cut(body, "UNIT\n")
+		if got != string(want) {
+			t.Errorf(
+				"late-command drop-in differs from mgmt's copy:\ngot:\n%s\nwant:\n%s",
+				got,
+				want,
+			)
+		}
+		return
+	}
+	t.Fatal("no late-command writes the nvidia-persistenced drop-in")
 }
 
 func TestWriteInitrd(t *testing.T) {

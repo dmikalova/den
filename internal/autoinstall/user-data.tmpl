@@ -193,6 +193,21 @@ autoinstall:
       printf '%s ALL=(ALL) NOPASSWD: ALL\n' '{{ .Username }}' > /tmp/den-sudoers
       visudo -cf /tmp/den-sudoers
       install -m 0440 -o root -g root /tmp/den-sudoers /target/etc/sudoers.d/den
+    # The NVIDIA driver package starts nvidia-persistenced at once, and udev
+    # starts it again. Until the reboot after the driver install, nouveau owns
+    # the card, so each start fails. A failed unit stops `den bootstrap` at its
+    # install check, before mgmt can write this drop-in. mgmt owns the same
+    # path afterwards, so keep the two byte for byte identical. A test checks it.
+    - |
+      set -euo pipefail
+      install -d -m 0755 /target/etc/systemd/system/nvidia-persistenced.service.d
+      cat > /target/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf <<'UNIT'
+      # The driver package starts this daemon at once. Until the first reboot after
+      # the install, nouveau owns the card, so the daemon fails and pages Discord.
+      # Skip it until the nvidia driver owns a device.
+      [Unit]
+      ConditionPathExistsGlob=/sys/bus/pci/drivers/nvidia/0000:*
+      UNIT
     # The same host key on every install, so known_hosts never changes. With
     # ssh_deletekeys off, cloud-init's first boot keeps it instead of
     # regenerating every host key.
