@@ -545,12 +545,26 @@ fi
 // RebootReason prints why den needs a reboot, or nothing. The NVIDIA check is
 // its own line because installing the driver does not always ask for one, and
 // without the module loaded there is no CDI spec for the GPU quadlets.
+//
+// The last line makes sure that a new install reboots once after its first
+// converge, even when nothing asks for it. That reboot is the only test of a
+// cold boot: the TPM unlocks the disk with no passphrase, and every service
+// and quadlet starts on its own. RebootedMarker records it.
 const RebootReason = `if [ -e /run/reboot-required ]; then
   echo "a package asked for it"
 elif modinfo nvidia >/dev/null 2>&1 && [ ! -e /proc/driver/nvidia/version ]; then
   echo "the NVIDIA module is installed but not loaded"
+elif ! sudo test -e ` + rebootedMarker + `; then
+  echo "it has not booted from its converged state yet"
 fi
 `
+
+// rebootedMarker exists once den has rebooted after a converge.
+const rebootedMarker = "/var/lib/den/rebooted-v1"
+
+// MarkRebooted writes rebootedMarker. Run it after a reboot that den came
+// back from.
+const MarkRebooted = "sudo install -d /var/lib/den && sudo touch " + rebootedMarker + "\n"
 
 // BootID changes on every boot, which is how a reboot is told apart from ssh
 // answering before the host has gone down.

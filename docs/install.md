@@ -148,8 +148,8 @@ to run at any time. In order, it:
 4. Sets den's tailnet IPv4 to `100.64.0.1`.
 5. Seals `GCP_KEY` to the TPM, so den can fetch its own secrets.
 6. Reboots if a package or the NVIDIA module needs it, and waits. The first
-   apply reboots for the NVIDIA driver, which also proves that the TPM
-   unlocks the disk.
+   apply on a new install always reboots one time. This reboot proves that
+   the TPM unlocks the disk and that every service starts on its own.
 7. Converges the user layer, `mgmt/user/main.mcl`.
 
 **Do not run `tailscale up` by hand.** Tailscale is not installed until step

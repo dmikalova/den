@@ -358,7 +358,10 @@ func (f hostFlags) rebootIfNeeded(
 	if _, err := fmt.Fprintf(stdout, "\nrebooting den: %s\n", reason); err != nil {
 		return err
 	}
-	return rebootAndWait(ctx, h, stdout)
+	if err := rebootAndWait(ctx, h, stdout); err != nil {
+		return err
+	}
+	return h.Run(ctx, bootstrap.MarkRebooted)
 }
 
 // rebootAndWait reboots den and waits until it is up on a new boot. It hands
