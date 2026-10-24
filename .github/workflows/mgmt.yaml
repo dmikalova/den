@@ -20,29 +20,17 @@ on:
         description: mgmt release tag to build
         required: true
         default: "1.1.0"
-      publish:
-        description: attach the binary to den's newest release
-        type: boolean
-        default: true
-  # The binary hangs off den's newest release, so a release without this job
-  # leaves bootstrap downloading a 404. A `release: published` trigger looks
-  # like the answer and silently is not: the release is cut with the default
-  # GITHUB_TOKEN, and GitHub refuses to start a workflow from an event that
-  # token raised. So CI/CD calls this directly once it has tagged.
-  workflow_call:
-    inputs:
-      version:
-        description: mgmt release tag to build
-        required: true
-        type: string
       tag:
         description: den release tag to attach the binary to
         required: true
-        type: string
       publish:
-        description: attach the binary to den's newest release
+        description: attach the binary to the den release
         type: boolean
         default: true
+  # Run this by hand on a mgmt version bump, then set DefaultMgmtVersion and
+  # mgmtRelease in internal/bootstrap/bootstrap.go to the version and the tag.
+  # It is not part of CI/CD: that caller is a fixed project-standards file, and
+  # the binary does not change between den releases.
   push:
     paths:
       - ".github/workflows/mgmt.yaml"
@@ -148,10 +136,8 @@ jobs:
       # parses it as semver, so any extra tag series breaks versioning.
       # Assets are named so they cannot collide with den's own.
       #
-      # The tag is passed in rather than resolved here. Asking for the newest
-      # release at this point attaches to whichever release is newest when the
-      # build finishes, which on closely spaced pushes is a later one, leaving
-      # this run's release with no binary at all.
+      # The tag is an input so that the binary lands on the release that
+      # mgmtRelease pins, not on whichever release is newest.
       - name: attach to den release
         env:
           GH_TOKEN: ${{ github.token }}

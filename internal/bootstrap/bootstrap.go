@@ -18,6 +18,16 @@ import (
 // than tracking latest.
 const DefaultMgmtVersion = "1.1.0"
 
+// mgmtRelease is the den release that carries the DefaultMgmtVersion binary.
+// Bump the two as a pair: run the mgmt workflow by hand with the new version
+// and a den tag, then set both here.
+//
+// It is a pin, not a search of the newest releases. The shared CI/CD caller is
+// a fixed file that the conformance bot rewrites, so no job can attach mgmt to
+// every release. A search window of recent releases fills with releases that
+// lack the binary, and then bootstrap fails.
+const mgmtRelease = "v1.12.1"
+
 // DefaultConfigRepo is the git remote holding the mcl source.
 const DefaultConfigRepo = "https://github.com/dmikalova/den.git"
 
@@ -72,7 +82,7 @@ func Bootstrap(o Options) []Step {
 		{
 			Name:   "install mgmt " + o.MgmtVersion,
 			Root:   true,
-			Script: fmt.Sprintf(installMgmt, o.MgmtVersion),
+			Script: fmt.Sprintf(installMgmt, o.MgmtVersion, mgmtRelease),
 		},
 	}
 	if o.Terminfo != "" {
@@ -345,11 +355,10 @@ apt-get install -y --no-install-recommends libaugeas0 libvirt0
 // tag against 26.04. Recheck upstream on every bump and go back to theirs when
 // it runs here.
 //
-// The asset hangs off a den release, but not necessarily the newest one: the
-// build takes minutes, so a release is newest for a while before its binary
-// lands. Walk back until a release that has it, rather than 404ing on timing.
+// The asset hangs off one pinned den release. See mgmtRelease.
 const installMgmt = `set -euo pipefail
 want=%s
+tag=%s
 if [ "$(mgmt --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)" = "$want" ]; then
   echo "mgmt $want already installed"
   exit 0
@@ -357,21 +366,12 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bin=mgmt-linux-amd64-${want}
-found=
-for tag in $(curl -fsSL https://api.github.com/repos/dmikalova/den/releases?per_page=20 |
-  grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/'); do
-  base=https://github.com/dmikalova/den/releases/download/$tag
-  # The newest releases may not carry mgmt, so a 404 here is expected.
-  if curl -fsL -o "$tmp/$bin" "$base/$bin" && curl -fsL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"; then
-    found=$tag
-    break
-  fi
-done
-if [ -z "$found" ]; then
-  echo "no den release carries $bin" >&2
+base=https://github.com/dmikalova/den/releases/download/$tag
+if ! curl -fsSL -o "$tmp/$bin" "$base/$bin" || ! curl -fsSL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"; then
+  echo "den $tag does not carry $bin: run the mgmt workflow and update mgmtRelease" >&2
   exit 1
 fi
-echo "mgmt $want from den $found"
+echo "mgmt $want from den $tag"
 ( cd "$tmp" && grep "  $bin\$" sums | sha256sum -c - )
 install -m 0755 "$tmp/$bin" /usr/local/bin/mgmt
 mgmt --version
