@@ -25,7 +25,10 @@ func usbBoot(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	h := remote.Host{Addr: *host, Stdout: stdout, Stderr: stderr}
 
 	if !h.Up(ctx) {
-		return fmt.Errorf("%s does not answer; select the stick in the firmware boot menu (F11)", h.Addr)
+		return fmt.Errorf(
+			"%s does not answer; select the stick in the firmware boot menu (F11)",
+			h.Addr,
+		)
 	}
 	entry, ok, err := usbEntry(ctx, h)
 	if err != nil {

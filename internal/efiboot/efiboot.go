@@ -21,7 +21,7 @@ var line = regexp.MustCompile(`^Boot([0-9A-Fa-f]{4})(\*?)\s+(.*)$`)
 // BootCurrent and BootOrder, are skipped.
 func Parse(out string) []Entry {
 	var entries []Entry
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		m := line.FindStringSubmatch(strings.TrimRight(l, "\r"))
 		if m == nil {
 			continue
