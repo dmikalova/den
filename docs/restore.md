@@ -222,6 +222,7 @@ Never-written areas of the drive stay as zeros.
 | VeraCrypt or TrueCrypt | random from byte 0, and the last 128 KiB random | `cryptsetup open --type tcrypt --veracrypt --readonly` |
 | plain dm-crypt | random from byte 0, no header anywhere | `cryptsetup open --type plain --readonly` with the original cipher and key |
 | hardware enclosure | random from byte 0; the drive was in a USB enclosure with encryption | put the drive back in the original enclosure model, then image it again through that enclosure |
+| ecryptfs (Ubuntu encrypted home) | the filesystem mounts, but `home/<user>` has only `.Private` and `.ecryptfs` links, and `home/.ecryptfs/<user>/` exists | see [ecryptfs home folders](#ecryptfs-home-folders) |
 
 Hardware enclosures that encrypt every sector include the WD My Book, the
 Toshiba Canvio Desk and some Buffalo DriveStation models. The bridge board
@@ -232,6 +233,69 @@ password was set.
 When the drive is back on its own board, the board decrypts transparently.
 The drive then shows a normal partition table, and you can start again at
 step 1. Image the drive through its own board, not through a generic adapter.
+
+### LVM in an image
+
+If the image has an LVM volume group, den sees the same volume group on the
+drive and on the image. Do these steps before you attach the image:
+
+1. Unmount the drive and deactivate its volume group:
+   `sudo vgchange -an <vg>`.
+2. Attach the image read-only: `LOOP=$(sudo losetup -r -P --show -f work.img)`.
+3. Activate the volume group from the image only:
+   `sudo vgchange -ay --devices ${LOOP}p3 <vg>`.
+4. Make sure that the logical volume uses the loop device:
+   `sudo dmsetup deps -o devname <vg>-root`.
+
+### ecryptfs home folders
+
+Ubuntu 18.04 and earlier can encrypt the home folder with ecryptfs. The key
+is wrapped with the old login password. The ecryptfs module is built into the
+den kernel. The user-space tools are only in a container, so den stays clean.
+
+1. Mount the root filesystem of the image read-only at `/mnt/ssd-image`.
+2. Build a rootful image `localhost/ecryptfs-tools` from `debian:trixie-slim`
+   with `ecryptfs-utils`, `keyutils` and `rsync`.
+3. Start the container. The `rshared` volume makes the decrypted mount visible
+   on den:
+
+   ```bash
+   sudo mkdir -p /mnt/ssd-home
+   sudo podman run -d --name ssd-decrypt --privileged --network none \
+     -v /mnt/ssd-image:/src:ro -v /mnt/ssd-home:/view:rshared \
+     localhost/ecryptfs-tools sleep infinity
+   ```
+
+4. Load the key. The owner types the old login password:
+
+   ```bash
+   sudo podman exec -it ssd-decrypt ecryptfs-insert-wrapped-passphrase-into-keyring \
+     /src/home/.ecryptfs/<user>/.ecryptfs/wrapped-passphrase
+   ```
+
+5. Mount the home folder read-only. The two signatures are the two lines of
+   `.ecryptfs/Private.sig`. They are key IDs, not secrets.
+
+   ```bash
+   sudo podman exec ssd-decrypt keyctl session - sh -c '
+     keyctl link @u @s
+     mount -i -t ecryptfs -o ro,ecryptfs_sig=<sig1>,ecryptfs_fnek_sig=<sig2>,ecryptfs_cipher=aes,ecryptfs_key_bytes=16 \
+       /src/home/.ecryptfs/<user>/.Private /view'
+   ```
+
+CAUTION: Do not skip `keyctl session` and `keyctl link @u @s`. Step 4 puts
+the keys in the root user keyring. `podman exec` inherits the session keyring
+of the caller, and the kernel does not search the root user keyring from that
+session. Without the link, the mount fails with `fsconfig() failed: No such
+file or directory`.
+
+To lock the home folder again, do these steps:
+
+1. Unmount it: `sudo podman exec ssd-decrypt umount /view`.
+2. Remove the container: `sudo podman rm -f ssd-decrypt`.
+3. Clear the keys. `keyctl` is not on den, so use a container:
+   `sudo podman run --rm --network none localhost/ecryptfs-tools keyctl clear @u`.
+4. Remove the image: `sudo podman rmi localhost/ecryptfs-tools`.
 
 ## Drive log
 
@@ -271,3 +335,39 @@ Status:
   power supply if it is also missing. Put the drive back on its own board.
   Image it again through that board, into a new directory. That image is
   plaintext. Then delete the ciphertext image.
+
+### sde-wd-WMC0S1089686
+
+| | |
+| --- | --- |
+| Drive | WD Green WD10EARX, 1 TB, serial `WD-WMC0S1089686` |
+| Adapter | ASMedia USB 3.0 bridge (`ASMT USB 3.0 Destop H`) |
+| SMART | passed; 24,723 power-on hours, 98 power cycles, 0 reallocated, 0 pending |
+
+Findings:
+
+- No partition table. The whole drive is one btrfs device.
+- This is devid 4 of the old `/mnt/data` pool: label `data`, UUID
+  `1571af3f-0838-4463-bc1e-0939ab88eb75`. The pool has 4 devices, 11.0 TB
+  in total and 5.03 TiB used. This drive holds 639 GiB of chunks.
+- The SYSTEM chunks are RAID1 on devid 1 and devid 2 only. Without one of
+  those two drives, btrfs cannot read the chunk tree, and the pool does not
+  mount.
+- The missing devices:
+
+  | devid | dev_uuid |
+  | --- | --- |
+  | 1 | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` |
+  | 2 | `afd881a8-b886-4e15-ac86-2f7aea78d500` |
+  | 3 | unknown |
+
+- The pool used `compress-force=zlib`, so file carving from one device gives
+  little.
+
+Status:
+
+- 2026-10-24: superblock analysis only. Not imaged.
+- Next: find the other members. On each candidate drive, run
+  `sudo btrfs inspect-internal dump-super /dev/sdX | grep -E 'fsid|devid'`.
+  Image each member. Then attach all images and mount the pool with
+  `-o ro,rescue=nologreplay`.
