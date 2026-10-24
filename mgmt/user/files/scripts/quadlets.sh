@@ -19,11 +19,14 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 # only runs when its sentinel is bumped, which is exactly when the file did
 # change, so the restart is never gratuitous.
 systemctl --user daemon-reload
-systemctl --user restart ollama.service
 
 # /srv/appdata/beszel and the hub's key pair are made by the host layer, so
 # the hub adopts a key the agent already trusts instead of generating its own.
+#
+# The hub goes first. It is what reports a failed ollama, so an ollama that
+# cannot start must not keep it down.
 systemctl --user restart beszel.service
+systemctl --user restart ollama.service
 
 # Wait for the API rather than the container, because the container is up well
 # before the server is listening and the pull below would race it.

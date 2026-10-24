@@ -82,6 +82,14 @@ file "/home/dmikalova/.config/containers/systemd/beszel.container" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/ollama.container.d/10-writable-rootfs.conf"],
 }
 
+# ollama's bind mount source. podman does not make it, and a missing source
+# fails the container start. The root layer gives /srv/models to this user.
+file "/srv/models/ollama/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
+}
+
 exec "quadlets-v4" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
@@ -91,5 +99,5 @@ exec "quadlets-v4" {
     shell => "/bin/bash",
     creates => "/home/dmikalova/.local/state/den/quadlets-v4",
 
-	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
+	Depend => File["/srv/models/ollama/"],
 }
