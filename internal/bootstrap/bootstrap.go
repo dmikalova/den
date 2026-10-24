@@ -490,9 +490,17 @@ exit "$rc"
 //
 // It gets its own state prefix because two mgmt runs sharing one would fight
 // over etcd, and the user cannot write the default prefix anyway.
+//
+// It takes den-reconcile's lock too: the prefix is separate, but etcd's port
+// 2380 is not. Without the lock, a CI apply that lands mid-step dies on bind.
+// root owns the lock file, so the user opens it read-only, which flock allows.
 const runUserMgmt = `set -euo pipefail
 cd %s/mgmt/user
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -e /run/den-reconcile.lock ]; then
+  exec 9</run/den-reconcile.lock
+  flock -w 900 9 || { echo "a reconcile held the lock for 15m, giving up" >&2; exit 1; }
+fi
 timeout --signal=INT --kill-after=30s 30m \
   mgmt run --no-autoedges --converger-timeout 30 --converged-exit%s \
   --prefix "$HOME/.local/state/mgmt" lang ./metadata.yaml
