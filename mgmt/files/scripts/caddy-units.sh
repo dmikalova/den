@@ -17,7 +17,7 @@ systemctl enable --now den-caddy-reload.path
 # converge, so on a fresh host there is nothing to open yet. Starting it
 # anyway fails the converge, and that failure returns from `den apply` before
 # it ever reaches the sealing step, which leaves the host unable to fix
-# itself. A fresh host therefore starts caddy at the reboot that follows.
+# itself. On a fresh host, den apply starts caddy after the seal.
 if [[ -f /etc/den/credentials/gcp-key.cred ]]; then
   systemctl start caddy.service
   systemctl reload caddy.service

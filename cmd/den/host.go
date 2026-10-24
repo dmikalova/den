@@ -478,6 +478,12 @@ sudo /usr/local/bin/den secrets seal --name=%s --out=%s <<'DEN_GCP_KEY_EOF'
 %s
 DEN_GCP_KEY_EOF
 sudo systemctl restart den-secrets.service
+# A fresh host enables caddy but cannot start it before this seal. Start it
+# here rather than wait for a reboot: bootstrap reboots only when the host
+# needs it. start is a no-op on a caddy that already runs.
+if systemctl is-enabled -q caddy.service 2>/dev/null; then
+  sudo systemctl start caddy.service
+fi
 `, filepath.Dir(sealedKeyPath), defaultKeyName, sealedKeyPath, key)
 
 	if err := h.Run(ctx, script); err != nil {
