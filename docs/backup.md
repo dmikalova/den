@@ -29,7 +29,8 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | `/srv/dumps` | no | scratch |
 
 The exclusions live in [mgmt/files/usr/local/bin/den-kopia](../mgmt/files/usr/local/bin/den-kopia).
-Remove the `/mnt/storage/recover` rule once the extraction is finished.
+Remove the `/mnt/storage/recover` rule once the extraction is finished. The
+extraction procedure is in [restore.md](restore.md).
 
 ## Schedule
 
