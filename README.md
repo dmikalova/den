@@ -25,6 +25,12 @@ The build downloads the Ubuntu ISO and verifies it against Canonical's signing
 key. Pass `--iso <path>` to use a copy you already have. It then lists the
 external disks and asks which one to write.
 
+Put the stick in den, and boot den from it one time:
+
+```bash
+den usb boot
+```
+
 See [docs/install.md](docs/install.md) for the full procedure.
 
 Build a memtest86+ stick, to test the memory before the box holds data:

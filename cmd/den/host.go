@@ -355,12 +355,18 @@ func (f hostFlags) rebootIfNeeded(
 	if reason == "" {
 		return nil
 	}
+	if _, err := fmt.Fprintf(stdout, "\nrebooting den: %s\n", reason); err != nil {
+		return err
+	}
+	return rebootAndWait(ctx, h, stdout)
+}
+
+// rebootAndWait reboots den and waits until it is up on a new boot. It hands
+// a LUKS prompt to this terminal, as waitUp does.
+func rebootAndWait(ctx context.Context, h remote.Host, stdout io.Writer) error {
 	before, err := h.Capture(ctx, bootstrap.BootID)
 	if err != nil {
 		return fmt.Errorf("reading the boot id: %w", err)
-	}
-	if _, err := fmt.Fprintf(stdout, "\nrebooting den: %s\n", reason); err != nil {
-		return err
 	}
 	// The connection drops mid-command, so its error says nothing.
 	_ = h.Run(ctx, "sudo systemctl reboot\n")

@@ -4,6 +4,7 @@
 // Usage:
 //
 //	den usb build [flags]
+//	den usb boot [flags]
 //	den usb memtest [flags]
 //	den usb write --device /dev/diskN [flags]
 //	den bootstrap [flags]
@@ -93,6 +94,7 @@ func usage(w io.Writer) {
 
 Usage:
   den usb build [flags]              build an unattended install image
+  den usb boot [flags]               reboot den into the install stick once
   den usb memtest [flags]            fetch the memtest86+ image
   den usb write --device <node>      write an image to a removable disk
   den bootstrap [flags]              take a fresh install to a checked den

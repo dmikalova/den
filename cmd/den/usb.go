@@ -28,9 +28,11 @@ const defaultRelease = "26.04.1"
 
 func usb(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usb needs a subcommand, build, memtest or write: %w", errUsage)
+		return fmt.Errorf("usb needs a subcommand, boot, build, memtest or write: %w", errUsage)
 	}
 	switch args[0] {
+	case "boot":
+		return usbBoot(ctx, args[1:], stdout, stderr)
 	case "build":
 		return usbBuild(ctx, args[1:], stdout, stderr)
 	case "memtest":

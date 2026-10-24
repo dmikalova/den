@@ -17,7 +17,7 @@ go install github.com/dmikalova/den/v3/cmd/den@latest
 den usb build
 
 # 2. Put the stick in den and boot from it
-ssh dmikalova@den.local 'sudo efibootmgr --bootnext 0002 && sudo systemctl reboot'
+den usb boot
 
 # 3. Configure den. Type the LUKS passphrase when it asks.
 den bootstrap
@@ -73,10 +73,14 @@ without a build, use
 
 ### 2. Install
 
-The `efibootmgr` command boots den from the stick one time. `0002` is the
-`UEFI:Removable Device` entry. If `sudo efibootmgr` shows another number, use
-that number. On a first install, or if den does not answer, select the stick
-in the firmware boot menu.
+`den usb boot` boots den from the stick one time. It finds the stick's entry
+in the `efibootmgr -v` list, sets `BootNext` to it, and reboots den.
+
+The firmware adds an entry for the stick only if the stick is in den at
+power-on. If there is no entry, `den usb boot` reboots den one time so that
+the firmware finds the stick, waits for den, and tries again. If den does not
+answer, or if the firmware still does not find the stick, select the stick in
+the firmware boot menu (F11). Do this on a first install too.
 
 The installer asks no questions. It installs to `/dev/nvme0n1`, which it
 selects by path, so the data drives are never candidates. It then reboots.
