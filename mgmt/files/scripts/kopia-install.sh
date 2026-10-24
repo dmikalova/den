@@ -8,11 +8,11 @@
 set -euo pipefail
 
 curl -fsSL https://kopia.io/signing-key |
-  gpg --dearmor -o /usr/share/keyrings/kopia-keyring.gpg
+  gpg --batch --yes --dearmor -o /usr/share/keyrings/kopia-keyring.gpg
 cat >/etc/apt/sources.list.d/kopia.list <<'EOF'
 deb [signed-by=/usr/share/keyrings/kopia-keyring.gpg] http://packages.kopia.io/apt/ stable main
 EOF
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y kopia
+apt-get -o DPkg::Lock::Timeout=600 update
+DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y kopia
 
 touch /var/lib/den/kopia-v1

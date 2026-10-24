@@ -4,6 +4,10 @@ Description=Regenerate the NVIDIA CDI spec
 # leaves it stale and every GPU container fails to start. Regenerating each
 # boot is cheaper than noticing that the hard way.
 ConditionPathExists=/usr/bin/nvidia-ctk
+# Until the first reboot after the driver install, nouveau owns the card. Then
+# NVML fails, and each try prints an NVRM conflict to the console. Skip the
+# unit until the nvidia driver owns a device.
+ConditionPathExistsGlob=/sys/bus/pci/drivers/nvidia/0000:*
 
 [Service]
 Type=oneshot

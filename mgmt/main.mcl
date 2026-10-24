@@ -465,6 +465,21 @@ file "/etc/systemd/system/nvidia-cdi-refresh.service" {
 	Depend => Exec["snapraid-units-v1"],
 }
 
+# No mode: see /var/lib/den/ above.
+file "/etc/systemd/system/nvidia-persistenced.service.d/" {
+	state => "exists",
+
+	Depend => File["/etc/systemd/system/nvidia-cdi-refresh.service"],
+}
+
+file "/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/nvidia-persistenced.service.d/"],
+}
+
 exec "nvidia-container-v1" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
@@ -472,7 +487,7 @@ exec "nvidia-container-v1" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/nvidia-container-v1",
 
-	Depend => File["/etc/systemd/system/nvidia-cdi-refresh.service"],
+	Depend => File["/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf"],
 }
 
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits

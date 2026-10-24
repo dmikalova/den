@@ -8,6 +8,6 @@ curl -fsSL "$base/${VERSION_CODENAME}.noarmor.gpg" \
   -o /usr/share/keyrings/tailscale-archive-keyring.gpg
 curl -fsSL "$base/${VERSION_CODENAME}.tailscale-keyring.list" \
   -o /etc/apt/sources.list.d/tailscale.list
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y tailscale
+apt-get -o DPkg::Lock::Timeout=600 update
+DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y tailscale
 touch /var/lib/den/tailscale-v1

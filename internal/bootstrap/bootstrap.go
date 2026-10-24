@@ -361,7 +361,8 @@ found=
 for tag in $(curl -fsSL https://api.github.com/repos/dmikalova/den/releases?per_page=20 |
   grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"([^"]+)"$/\1/'); do
   base=https://github.com/dmikalova/den/releases/download/$tag
-  if curl -fsSL -o "$tmp/$bin" "$base/$bin" && curl -fsSL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"; then
+  # The newest releases may not carry mgmt, so a 404 here is expected.
+  if curl -fsL -o "$tmp/$bin" "$base/$bin" && curl -fsL -o "$tmp/sums" "$base/mgmt-SHA256SUMS"; then
     found=$tag
     break
   fi
