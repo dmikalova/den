@@ -2,6 +2,10 @@
 Description=Daily kopia backup to Backblaze
 
 [Timer]
+# Nightly, not hourly. The drives are idle most of the day, and a nightly run
+# lets them spin down. It still limits data loss to one day, which is the same
+# limit snapraid gives.
+#
 # Before the midnight snapraid sync rather than after it. The day's writes go
 # offsite first, so the slow local parity pass is never what stands between a
 # new file and its only other copy.

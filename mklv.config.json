@@ -3,6 +3,21 @@
   "name": "den",
   "entrypoint": "cmd/den/main.go",
   "kind": "cli",
+  "tools": {
+    "lefthook": {
+      "pre-commit": {
+        "commands": {
+          "no-shell-scripts": {
+            "exclude": [
+              "internal/autoinstall/initrd/*.sh",
+              "mgmt/**/*.sh",
+              "scripts/*.sh"
+            ]
+          }
+        }
+      }
+    }
+  },
   "ignore": {
     "git": [
       "/bin/",

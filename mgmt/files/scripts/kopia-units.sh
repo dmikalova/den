@@ -9,4 +9,4 @@
 set -euo pipefail
 systemctl daemon-reload
 systemctl enable --now kopia-backup.timer kopia-restore-drill.timer
-touch /var/lib/den/kopia-units-v2
+touch /var/lib/den/kopia-units-v3

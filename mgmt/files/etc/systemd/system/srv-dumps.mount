@@ -2,6 +2,11 @@
 Description=Database dumps on the @dumps subvolume
 # Separate from @appdata because a dump is a consistent copy taken on purpose,
 # while a snapshot of a running database is only crash consistent.
+#
+# On the NVMe, not the pool. A dump is rewritten every night, and on the pool
+# each rewrite is a write that snapraid must take to parity, for data whose
+# only reader is the backup a few minutes later. kopia sends it offsite on the
+# same schedule either way, and a dump is disposable by the next night.
 Before=local-fs.target
 
 [Mount]

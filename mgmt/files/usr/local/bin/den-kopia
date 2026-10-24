@@ -7,8 +7,10 @@
 #
 # Encryption is client side, so Backblaze holds ciphertext and KOPIA_PASSWORD
 # is the whole of what makes it readable. The password is minted by the
-# infrastructure repo, never typed, and never stored on this host outside the
-# credential systemd hands this script.
+# infrastructure repo and never typed. systemd hands it to this script, and
+# kopia keeps a copy beside its config so a root shell can restore without it.
+# That copy is root only, on the LUKS volume. Root on den can read the secrets
+# directory anyway, so it adds no exposure.
 #
 # Run by kopia-backup.service, which is what grants the credentials. Running it
 # by hand needs that service's environment, so run the service instead:
@@ -81,8 +83,19 @@ fi
 # Policy lives in the repository, so this is both "set it" and "put it back".
 # Cheap enough to assert every run, which is the point: a policy edited by hand
 # during an incident should not survive the incident.
+#
+# Compression: B2 storage is the running cost, and the CPU is idle at 22:00.
+# `kopia benchmark compression` on this host (Ryzen 7 7700, 16 threads):
+#   zstd-fastest              5.0 GB/s  baseline size
+#   zstd (level 3)            3.6 GB/s   8% smaller
+#   zstd-better-compression   1.3 GB/s  16% smaller  <- this
+#   zstd-best-compression     0.6 GB/s  20% smaller, deprecated in kopia
+# 1.3 GB/s is still several times what the data drives can read, so the backup
+# stays disk- or upload-bound. A change applies to new data only.
+#
+# node_modules/ and .terraform/ are reinstalled from a lockfile, never restored.
 kopia policy set --global \
-	--compression=zstd-fastest \
+	--compression=zstd-better-compression \
 	--keep-latest=5 \
 	--keep-hourly=0 \
 	--keep-daily=14 \
@@ -91,6 +104,8 @@ kopia policy set --global \
 	--keep-annual=3 \
 	--add-ignore='.snapshots/' \
 	--add-ignore='lost+found/' \
+	--add-ignore='node_modules/' \
+	--add-ignore='.terraform/' \
 	--add-ignore='*.part' \
 	--add-ignore='*.tmp'
 

@@ -17,6 +17,12 @@ SMB3 is the minimum protocol and encryption is required, so a session that
 cannot encrypt does not connect. There is no guest access and no NetBIOS;
 `nmbd` is masked.
 
+There is no LAN share and no split-horizon DNS, because neither is necessary.
+On the home LAN, Tailscale makes a direct peer-to-peer connection, so the
+traffic does not go through a relay. WireGuard on the Ryzen 7 7700 encrypts at
+several Gbps, which is more than the LAN and the drives can supply. If
+`tailscale status` shows `relay` at home, fix that.
+
 | Share         | Path                       | Notes                                          |
 | ------------- | -------------------------- | ---------------------------------------------- |
 | `storage`     | `/mnt/storage`             | the pooled array; `timemachine` is vetoed here |
@@ -49,6 +55,10 @@ Rotating it means changing `SAMBA_PASSWORD` in `secrets/den.sops.json` in the
 infrastructure repo, which breaks every connected client until each one is
 told the new password. It is chosen rather than generated because a human
 types it at a connect prompt on a device that has no other way in.
+
+SMB has no public-key authentication. It uses NTLM or Kerberos only, so an SSH
+key cannot replace the password. One shared account with one long password is
+the design. To revoke access, rotate the password.
 
 ## Time Machine is not backed up
 

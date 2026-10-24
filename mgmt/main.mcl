@@ -839,12 +839,12 @@ file "/etc/systemd/system/kopia-restore-drill.timer" {
 }
 
 # Bump the version for a unit change; the sentinel is what makes this run once.
-exec "kopia-units-v2" {
+exec "kopia-units-v3" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/kopia-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/kopia-units-v2",
+	creates => "/var/lib/den/kopia-units-v3",
 
 	Depend => File["/etc/systemd/system/kopia-restore-drill.timer"],
 }
@@ -862,7 +862,7 @@ file "/etc/samba/smb.conf" {
 	content => deploy.readfile("/files/etc/samba/smb.conf"),
 	mode => "0644",
 
-	Depend => Exec["kopia-units-v2"],
+	Depend => Exec["kopia-units-v3"],
 }
 
 file "/usr/local/bin/den-samba-user" {
@@ -881,16 +881,31 @@ file "/etc/systemd/system/den-samba.service" {
 	Depend => File["/usr/local/bin/den-samba-user"],
 }
 
+# No mode: see /var/lib/den/ above.
+file "/etc/systemd/system/smbd.service.d/" {
+	state => "exists",
+
+	Depend => File["/etc/systemd/system/den-samba.service"],
+}
+
+file "/etc/systemd/system/smbd.service.d/10-den-storage.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/smbd.service.d/10-den-storage.conf"),
+	mode => "0644",
+
+	Depend => File["/etc/systemd/system/smbd.service.d/"],
+}
+
 # Enabled, not started: the password comes from the secrets path, which is not
 # populated until `den apply` has written the sealed key.
-exec "samba-units-v1" {
+exec "samba-units-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/samba-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/samba-units-v1",
+	creates => "/var/lib/den/samba-units-v2",
 
-	Depend => File["/etc/systemd/system/den-samba.service"],
+	Depend => File["/etc/systemd/system/smbd.service.d/10-den-storage.conf"],
 }
 
 # The front door.
@@ -905,7 +920,7 @@ exec "caddy-v2" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/caddy-v2",
 
-	Depend => Exec["samba-units-v1"],
+	Depend => Exec["samba-units-v2"],
 }
 
 # den's own, because the apt package's unit went with the apt package. This is

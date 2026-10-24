@@ -22,15 +22,51 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | Path | kopia | Why |
 | --- | --- | --- |
 | `/srv/appdata` | yes | container state; small, irreplaceable |
+| `/srv/dumps` | yes | consistent database dumps; see below |
 | `/mnt/storage` | yes | the array |
 | `/mnt/storage/recover` | no | **temporary**; a second copy of the old array during extraction |
 | `/mnt/storage/timemachine` | no | already a backup, and it churns; see [shares.md](shares.md) |
 | `/srv/models` | no | re-downloadable; paying to store it twice is waste |
-| `/srv/dumps` | no | scratch |
+| `node_modules/`, `.terraform/` | no | anywhere; reinstalled from a lockfile |
 
 The exclusions live in [mgmt/files/usr/local/bin/den-kopia](../mgmt/files/usr/local/bin/den-kopia).
 Remove the `/mnt/storage/recover` rule once the extraction is finished. The
 extraction procedure is in [restore.md](restore.md).
+
+`/srv/dumps` is the `@dumps` subvolume on the NVMe, beside `@appdata`. A
+snapshot of a running database in `/srv/appdata` is only crash consistent. A
+dump is consistent because it is taken on purpose. A service with a database
+writes its dump to `/srv/dumps` before `kopia-backup.timer` fires. Nothing does
+this yet.
+
+## Retention
+
+| Rule | Keeps |
+| --- | --- |
+| `keep-latest` 5 | the 5 newest snapshots |
+| `keep-daily` 14 | the newest snapshot of each of 14 days |
+| `keep-weekly` 8 | the newest snapshot of each of 8 weeks |
+| `keep-monthly` 12 | the newest snapshot of each of 12 months |
+| `keep-annual` 3 | the newest snapshot of each of 3 years |
+
+A snapshot stays if any rule keeps it. Kopia counts each window back from the
+newest snapshot, not from the clock. If the backup stops, no snapshot expires.
+
+## Compression
+
+The policy uses `zstd-better-compression`. B2 storage is the running cost, so
+the backup trades CPU for size. `kopia benchmark compression` on den
+(Ryzen 7 7700, 16 threads) gives these results:
+
+| Method | Throughput | Size |
+| --- | --- | --- |
+| `zstd-fastest` | 5.0 GB/s | baseline |
+| `zstd` (level 3) | 3.6 GB/s | 8% smaller |
+| `zstd-better-compression` | 1.3 GB/s | 16% smaller |
+| `zstd-best-compression` | 0.6 GB/s | 20% smaller; deprecated |
+
+1.3 GB/s is more than the data drives can read, so compression does not slow
+the backup. A policy change applies to new data only.
 
 ## Schedule
 
@@ -64,14 +100,19 @@ GCP gone.
 
 ## Restore a file
 
+Set `KOPIA_CONFIG_PATH` for each command. `sudo` drops it from the shell
+environment. Kopia keeps the repository password beside the config, so no
+password step is necessary.
+
 ```bash
-systemctl start kopia-restore-drill.service   # or, for a real restore:
-sudo --preserve-env=KOPIA_CONFIG_PATH kopia snapshot list /srv/appdata
-sudo kopia restore <snapshot-id>/path/to/file /var/tmp/recovered
+k() { sudo env KOPIA_CONFIG_PATH=/var/lib/kopia/repository.config kopia "$@"; }
+k snapshot list /srv/appdata
+k ls -l <snapshot-id>/path/to
+k restore <snapshot-id>/path/to/file /var/tmp/recovered
 ```
 
-`kopia` needs `KOPIA_CONFIG_PATH=/var/lib/kopia/repository.config` and the
-repository password. The units supply both; a shell does not.
+To prove a restore works without a real loss, start the drill instead:
+`sudo systemctl start kopia-restore-drill.service`.
 
 ## Drill: kopia
 

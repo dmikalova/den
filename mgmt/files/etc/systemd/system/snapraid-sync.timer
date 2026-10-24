@@ -2,6 +2,11 @@
 Description=Daily snapraid parity sync
 
 [Timer]
+# Daily, not hourly. Each sync updates parity to match the array as it is now,
+# so a sync after a wrong delete makes that delete final as far as
+# `snapraid fix` is concerned. The time between syncs is the undelete window.
+# Hourly would also keep all four drives spun up. kopia, not parity, is what
+# protects new data.
 OnCalendar=daily
 # A sync of a 12 TB drive takes hours, so it runs when nothing else wants the
 # disks rather than at the stroke of midnight with everything else.

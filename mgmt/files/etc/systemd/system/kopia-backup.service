@@ -6,7 +6,7 @@ After=network-online.target den-secrets.service
 # unit starts on a boot where they are not there yet and fails on a host that
 # is fine.
 Requires=den-secrets.service
-RequiresMountsFor=/srv/appdata /mnt/storage
+RequiresMountsFor=/srv/appdata /srv/dumps /mnt/storage
 
 [Service]
 Type=oneshot
