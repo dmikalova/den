@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dmikalova/den/internal/notify"
+	"github.com/dmikalova/den/v3/internal/notify"
 )
 
 // These live on den, not in the repository. The webhook is a bearer credential

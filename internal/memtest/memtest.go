@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dmikalova/den/internal/fetch"
+	"github.com/dmikalova/den/v3/internal/fetch"
 )
 
 // DefaultVersion is the memtest86+ release den fetches.

@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dmikalova/den/internal/autoinstall"
-	"github.com/dmikalova/den/internal/memtest"
-	"github.com/dmikalova/den/internal/progress"
-	"github.com/dmikalova/den/internal/secrets"
-	"github.com/dmikalova/den/internal/usbdisk"
+	"github.com/dmikalova/den/v3/internal/autoinstall"
+	"github.com/dmikalova/den/v3/internal/memtest"
+	"github.com/dmikalova/den/v3/internal/progress"
+	"github.com/dmikalova/den/v3/internal/secrets"
+	"github.com/dmikalova/den/v3/internal/usbdisk"
 )
 
 // defaultRelease is the Ubuntu Server release den installs.

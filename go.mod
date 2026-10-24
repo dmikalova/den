@@ -1,4 +1,4 @@
-module github.com/dmikalova/den
+module github.com/dmikalova/den/v3
 
 go 1.27.3
 

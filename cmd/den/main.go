@@ -21,11 +21,24 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 )
 
 // version is the release version, set by goreleaser with -ldflags.
 var version = "dev"
+
+// buildVersion is the release version, or else the module version that
+// `go install …@version` records, such as v3.1.1 or a main pseudo-version.
+func buildVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
 
 // errUsage marks an error whose fix is reading the usage.
 var errUsage = errors.New("usage")
@@ -44,7 +57,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		usage(stdout)
 		return 0
 	case args[0] == "version":
-		_, _ = fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, buildVersion())
 		return 0
 	case args[0] == "usb":
 		err = usb(ctx, args[1:], stdout, stderr)

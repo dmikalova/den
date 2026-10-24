@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/dmikalova/den/internal/check"
-	"github.com/dmikalova/den/internal/remote"
+	"github.com/dmikalova/den/v3/internal/check"
+	"github.com/dmikalova/den/v3/internal/remote"
 )
 
 // checkHost runs the smoke checks and reports them. It never changes the host,

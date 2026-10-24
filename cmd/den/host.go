@@ -13,10 +13,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/dmikalova/den/internal/bootstrap"
-	"github.com/dmikalova/den/internal/remote"
-	"github.com/dmikalova/den/internal/secrets"
-	"github.com/dmikalova/den/internal/tailnet"
+	"github.com/dmikalova/den/v3/internal/bootstrap"
+	"github.com/dmikalova/den/v3/internal/remote"
+	"github.com/dmikalova/den/v3/internal/secrets"
+	"github.com/dmikalova/den/v3/internal/tailnet"
 )
 
 // defaultHost is the ssh destination. den answers to den.local over mDNS on

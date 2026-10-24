@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmikalova/den/internal/gcp"
-	"github.com/dmikalova/den/internal/notify"
+	"github.com/dmikalova/den/v3/internal/gcp"
+	"github.com/dmikalova/den/v3/internal/notify"
 )
 
 // den's runtime secret, and where the pieces of it live on the host.

@@ -10,7 +10,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/dmikalova/den/internal/remote"
+	"github.com/dmikalova/den/v3/internal/remote"
 )
 
 // DefaultMgmtVersion is the mgmt release den installs. The binary is checked

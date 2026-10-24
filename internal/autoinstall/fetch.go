@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dmikalova/den/internal/fetch"
+	"github.com/dmikalova/den/v3/internal/fetch"
 )
 
 // releasesURL is where Canonical publishes the Server ISO, its checksums and

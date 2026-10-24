@@ -9,7 +9,7 @@ lives in [CONTEXT.md](CONTEXT.md).
 ## Install
 
 ```bash
-go install github.com/dmikalova/den/cmd/den@latest && den version
+go install github.com/dmikalova/den/v3/cmd/den@latest && den version
 go install ./cmd/den/ && den version
 ```
 

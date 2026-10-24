@@ -13,7 +13,7 @@ Run these in order on the Mac. Each step is explained in [Steps](#steps).
 ssh dmikalova@den.local sudo systemctl start --wait kopia-backup.service snapraid-sync.service
 
 # 1. Build the image, and pick the USB stick to write it to
-go install github.com/dmikalova/den/cmd/den@latest
+go install github.com/dmikalova/den/v3/cmd/den@latest
 den usb build
 
 # 2. Put the stick in den and boot from it
