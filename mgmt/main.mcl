@@ -452,7 +452,8 @@ exec "snapraid-units-v1" {
 # The driver is the open kernel module build, which is what NVIDIA supports on
 # Ada and later. Installing it is what takes the card off nouveau; the package
 # blacklists nouveau itself in /usr/lib/modprobe.d, so nothing here repeats it.
-# It needs a reboot to take effect, which mgmt does not do.
+# The blacklist only stops the next boot loading nouveau. See nouveau-off for
+# the boot that installs the driver.
 #
 # Containers reach the GPU through CDI rather than a runtime wrapper: the
 # quadlets are rootless, and CDI is the path that does not need a privileged
@@ -488,6 +489,24 @@ exec "nvidia-container-v1" {
 	creates => "/var/lib/den/nvidia-container-v1",
 
 	Depend => File["/etc/systemd/system/nvidia-persistenced.service.d/10-den-wait-driver.conf"],
+}
+
+# On the boot that installs the driver, nouveau still owns the card. The
+# driver's udev rules then load nvidia, which finds no device and unloads, and
+# each unload raises the next load: a loop of "already bound to nouveau" on the
+# console, several times a second, until a reboot.
+#
+# Removing nouveau ends it: the next turn of the loop binds nvidia, and the GPU
+# works without the reboot. rmmod, not modprobe -r: the package's alias
+# nouveau off redirects modprobe -r too, so it exits 0 and removes nothing.
+# A nouveau that is in use stays, and the reboot takes it off as before.
+exec "nouveau-off" {
+	cmd => "rmmod nouveau || echo 'nouveau is in use; the reboot takes it off'",
+	shell => "/bin/bash",
+	ifcmd => "grep -q '^nouveau ' /proc/modules",
+	ifshell => "/bin/bash",
+
+	Depend => Pkg["nvidia-driver-595-open"],
 }
 
 # Ubuntu's dynamic motd is release upsell and a news feed that each login waits
