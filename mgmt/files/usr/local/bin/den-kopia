@@ -116,9 +116,13 @@ kopia policy set /mnt/storage --add-ignore='/timemachine/'
 
 # TEMPORARY. /mnt/storage/recover holds the drives being extracted from the old
 # array; it is a second copy of data that is already somewhere else, and paying
-# to upload it twice is waste. Delete this block once the extraction is done,
-# or it will quietly exclude a real directory that happens to inherit the name.
+# to upload it twice is waste. /mnt/storage/restore holds the files pulled out
+# of those images until they are checked; what is worth keeping moves to
+# /mnt/storage/mess, and only then is it paid for. Delete this block once the
+# extraction is done, or it will quietly exclude a real directory that happens
+# to inherit the name. See docs/restore.md.
 kopia policy set /mnt/storage --add-ignore='/recover/'
+kopia policy set /mnt/storage --add-ignore='/restore/'
 
 for src in "${sources[@]}"; do
 	mountpoint -q "$src" || [ -d "$src" ] || {

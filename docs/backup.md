@@ -24,15 +24,17 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | `/srv/appdata` | yes | container state; small, irreplaceable |
 | `/srv/dumps` | yes | consistent database dumps; see below |
 | `/mnt/storage` | yes | the array |
-| `/mnt/storage/recover` | no | **temporary**; a second copy of the old array during extraction |
+| `/mnt/storage/recover` | no | **temporary**; raw images of old drives during extraction |
+| `/mnt/storage/restore` | no | **temporary**; files from old drives before validation; validated files move to `/mnt/storage/mess` |
 | `/mnt/storage/timemachine` | no | already a backup, and it churns; see [shares.md](shares.md) |
 | `/srv/models` | no | re-downloadable; paying to store it twice is waste |
 | `node_modules/`, `.terraform/` | no | anywhere; reinstalled from a lockfile |
 
 The exclusions live in [mgmt/files/usr/local/bin/den-kopia](../mgmt/files/usr/local/bin/den-kopia).
-The `/mnt/storage/recover` rule is temporary. SnapRAID also excludes
-`/recover/` in [snapraid.conf](../mgmt/files/etc/snapraid.conf). Remove both
-rules when the extraction is finished. The extraction procedure and the
+The `/mnt/storage/recover` and `/mnt/storage/restore` rules are temporary.
+SnapRAID also excludes `/recover/` and `/restore/` in
+[snapraid.conf](../mgmt/files/etc/snapraid.conf). Remove all four rules when
+the extraction is finished. The extraction procedure and the
 cleanup steps are in [restore.md](restore.md).
 
 `/srv/dumps` is the `@dumps` subvolume on the NVMe, beside `@appdata`. A

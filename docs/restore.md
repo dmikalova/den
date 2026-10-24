@@ -13,13 +13,16 @@ happened on each drive.
 | Path | Holds | kopia | snapraid |
 | --- | --- | --- | --- |
 | `~/data/recover/<drive>/` | the raw image, the ddrescue map, SMART output | no | no |
-| `~/data/restore/<drive>/` | the files that came out of the image | yes | yes |
+| `~/data/restore/<drive>/` | the files that came out of the image, before validation | no | no |
+| `~/data/mess/<drive>/` | the validated files, before you sort them into the library | yes | yes |
 
 `~/data` is a link to `/mnt/storage`. `<drive>` is the device name, the model
 and the serial, for example `sde-toshiba-85UT1EVAS`.
 
-kopia and snapraid both exclude `/recover/`. The old drive is the only other
-copy of an image. Keep the old drive until its files are in kopia.
+kopia and snapraid both exclude `/recover/` and `/restore/`. Nothing in them
+gets a backup or parity, so nothing in them costs B2 storage. The old drive
+and the image are the only other copies. Keep the old drive and the image
+until the files are in `~/data/mess` and in a kopia snapshot.
 
 > **Caution:** Do not image a drive before the `/recover/` exclude is on den.
 > Check it with `grep recover /etc/snapraid.conf`. Without it, the next
@@ -201,14 +204,19 @@ No output means every file is the same as in the image.
 Do these in this sequence:
 
 1. Unmount and detach: `sudo umount /mnt/recovered && sudo losetup -d "$LOOP"`.
-2. Let the nightly kopia backup take `~/data/restore/<drive>`, or start it:
+2. Delete `work.img`.
+3. Look through `~/data/restore/<drive>`. Delete what you do not want.
+4. Move the rest to `~/data/mess/<drive>`. Only now do the files get a
+   backup and parity.
+5. Let the nightly kopia backup take `~/data/mess/<drive>`, or start it:
    `sudo systemctl start kopia-backup.service`.
-3. Restore one file from the new snapshot. See
+6. Restore one file from the new snapshot. See
    [backup.md](backup.md#restore-a-file).
-4. Delete `work.img`. Keep `disk.img` until you no longer need the old drive.
-5. When `~/data/recover` is empty, remove both `/recover/` rules: the ignore
-   rule in `den-kopia` and the exclude in `snapraid.conf`. Without this, files
-   that you put in a `recover` folder later get no backup and no parity.
+7. Delete the image. Keep the old drive until you no longer need it.
+8. When `~/data/recover` and `~/data/restore` are both empty, remove the
+   `/recover/` and `/restore/` rules: the ignore rules in `den-kopia` and the
+   excludes in `snapraid.conf`. Without this, files that you put in a folder
+   with one of these names later get no backup and no parity.
 
 ## Encrypted drives
 
