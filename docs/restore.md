@@ -528,6 +528,14 @@ Findings:
 Status:
 
 - 2026-10-24: started at 13:44 with the `copy-sdcard` unit:
-  `rsync -rt` from `/mnt/sdcard` (mounted `ro`). It takes about 23 h.
-- Next: verify with `rsync -rt --dry-run --checksum --itemize-changes`.
-  Then `sudo umount /mnt/sdcard` and remove the card.
+  `rsync -rt` from `/mnt/sdcard` (mounted `ro`). The copy excludes the
+  macOS metadata: `.Spotlight-V100`, `.fseventsd`, `._*` and `.Trashes`.
+- 2026-10-25 14:30: the copy finished. It took 24 h 45 min at 3.4 MB/s
+  for 307.3 GB.
+- 2026-10-25: verified with `rsync -rt --dry-run --itemize-changes`. All
+  7,310 files agree in size and time. The 111 other files on the card are
+  the excluded macOS metadata. rsync checks each file with a checksum while
+  it copies, so a second `--checksum` pass (about 25 h) was not done.
+- 2026-10-25: unmounted the card. The card can be removed.
+- 2026-10-25: SnapRAID added the copy to parity. Kopia backs it up with
+  `mess`.
