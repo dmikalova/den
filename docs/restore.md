@@ -329,7 +329,7 @@ model.
 | devid | Old name | Drive | Serial | dev_uuid | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | not found yet |
-| 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | not found yet |
+| 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaging; see the drive log |
 | 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | unknown | not found yet |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
 
@@ -482,6 +482,32 @@ Status:
   pending. Sealed: `chmod 444`, SHA-256 `28b4d3d1…5340` in
   `image.img.sha256`. The image uses 620 GiB on disk because it is sparse.
 - The drive is off den. Next: devid 2, the WD Red 4 TB.
+
+### sde-wd-WCC4E7HP6U7J
+
+| | |
+| --- | --- |
+| Drive | WD Red WD40EFRX, 4 TB, serial `WD-WCC4E7HP6U7J` |
+| SMART | passed; 16,452 power-on hours, 0 reallocated, **1 pending**, 11 raw read errors, no errors in the error log |
+| Image | `/mnt/disk3/data/recover/sde-wd-WCC4E7HP6U7J/image.img` (sparse) |
+| Files | `smart-before.txt`, `smart-after.txt`, `btrfs-super.txt` |
+
+Findings:
+
+- No partition table. The whole drive is one btrfs device.
+- devid 2 of the old `/mnt/data` pool, dev_uuid
+  `afd881a8-b886-4e15-ac86-2f7aea78d500`, generation 128763. The drive
+  holds 3.07 TB of chunks.
+- The drive has a copy of the SYSTEM chunks.
+- The old server logged 1 write error and 12 read errors on this drive. The
+  1 pending sector agrees with that.
+
+Status:
+
+- 2026-10-24 22:00: started the image with the `recover-wdred4tb` unit.
+  Pass 1 (`-n`) skips the bad areas. Pass 2 (`-d -r3`) retries them.
+- Next: read the map. Record the bad areas. Seal the image. Attach the next
+  pool member.
 
 ### sdf-sdcard-512gb
 
