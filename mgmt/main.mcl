@@ -1120,12 +1120,12 @@ file "/etc/systemd/system/den-user-env.service" {
 # den-secrets fetches again first, so that a key added in the infrastructure
 # repo is there. A missing key fails here, which is where it is easy to see.
 # Bump the version for a unit change or a new key.
-exec "den-user-env-units-v1" {
+exec "den-user-env-units-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
-	cmd => "systemctl daemon-reload && systemctl enable den-user-env.service && if systemctl is-active -q den-secrets.service; then systemctl restart den-secrets.service den-user-env.service; fi && touch /var/lib/den/den-user-env-units-v1",
+	cmd => "systemctl daemon-reload && systemctl enable den-user-env.service && if systemctl is-active -q den-secrets.service; then systemctl restart den-secrets.service den-user-env.service; fi && rm -f /var/lib/den/den-user-env-units-v* && touch /var/lib/den/den-user-env-units-v2",
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-user-env-units-v1",
+	creates => "/var/lib/den/den-user-env-units-v2",
 
 	Depend => File["/etc/systemd/system/den-user-env.service"],
 }

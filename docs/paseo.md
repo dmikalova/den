@@ -68,6 +68,22 @@ repo copies them into the `den-host` secret:
   the repositories that the instance works on. git uses it through
   `gh auth git-credential`.
 
+The commit signing key is a den secret, not a Paseo secret. Other systems can
+use the same key. It is the `id_dmikalova` SSH key in `secrets/ssh.sops.json`
+in the infrastructure repo. Both instances get the same key:
+
+| Key in `ssh.sops.json` | Key in `den-host`              | Variable in the container            |
+| ---------------------- | ------------------------------ | ------------------------------------ |
+| `private_key_base64`   | `DMIKALOVA_SSH_KEY`            | `PASEO_SETUP_SIGNING_KEY`            |
+| `passphrase`           | `DMIKALOVA_SSH_KEY_PASSPHRASE` | `PASEO_SETUP_SIGNING_KEY_PASSPHRASE` |
+
+- The key is base64, because `den-user-env` refuses a value with a new line.
+- The key has a passphrase. The image entrypoint removes the passphrase from a
+  copy of the key in `/tmp`, which is tmpfs. The key without a passphrase
+  never goes to the disk.
+- GitHub shows a commit as verified only if the commit email is a verified
+  email of the `dmikalova` account.
+
 To add a key, add it to the `den-host` secret and to `den-user-env.service`.
 Then bump the version of `den-user-env-units` in `mgmt/main.mcl`.
 

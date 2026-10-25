@@ -34,8 +34,14 @@ Environment="GIT_AUTHOR_NAME=David Mikalova"
 Environment=GIT_AUTHOR_EMAIL=324548+dmikalova@users.noreply.github.com
 Environment="GIT_COMMITTER_NAME=David Mikalova"
 Environment=GIT_COMMITTER_EMAIL=324548+dmikalova@users.noreply.github.com
-# PASEO_PASSWORD, CLAUDE_CODE_OAUTH_TOKEN and GH_TOKEN. den-user-env.service
-# writes this file from the secrets path. See docs/paseo.md.
+# The image entrypoint reads these on start. It clones every repository of
+# the owners into /workspace and registers each one as a project. Only these
+# agent providers show in the UI.
+Environment=PASEO_SETUP_OWNERS=goodship-io
+Environment=PASEO_SETUP_PROVIDERS=claude,gemini
+# PASEO_PASSWORD, CLAUDE_CODE_OAUTH_TOKEN, GH_TOKEN and the commit signing key
+# and its passphrase. den-user-env.service writes this file from the secrets
+# path. See docs/paseo.md.
 EnvironmentFile=/run/den-env/paseo-work.env
 # Agents build and test in /tmp.
 Tmpfs=/tmp:rw,exec,nosuid,nodev,size=4g
