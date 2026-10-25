@@ -6,10 +6,14 @@ Gemini CLI) in work trees and serves a web UI. The design is in Notion.
 den runs two instances. They use the same image, with separate credentials and
 separate state.
 
-| Instance     | URL                                | Port   | Use                |
-| ------------ | ---------------------------------- | ------ | ------------------ |
-| `paseo`      | `https://paseo.den.mklv.tech`      | `6767` | personal projects  |
-| `paseo-work` | `https://paseo-work.den.mklv.tech` | `6768` | work projects      |
+| Instance     | URL                                | Local port | Use               |
+| ------------ | ---------------------------------- | ---------- | ----------------- |
+| `paseo`      | `https://paseo.den.mklv.tech`      | `6767`     | personal projects |
+| `paseo-work` | `https://paseo-work.den.mklv.tech` | `6768`     | work projects     |
+
+The local port listens on 127.0.0.1 only. Caddy is the path in. To connect
+the app with a direct connection, use the instance host, port `443`, and
+"Use SSL". Port 6767 or 6768 from another machine refuses the connection.
 
 The image is `ghcr.io/dmikalova/paseo`. It is upstream Paseo plus the agent
 CLIs and the tools for the standard project check. The
