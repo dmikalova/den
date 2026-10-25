@@ -539,3 +539,7 @@ Status:
 - 2026-10-25: unmounted the card. The card can be removed.
 - 2026-10-25: SnapRAID added the copy to parity. Kopia backs it up with
   `mess`.
+- 2026-10-25: compared a second 512 GB card (exFAT UUID `6131-3763`) with
+  the copy. The file paths and sizes agree byte for byte: 7,310 files. One
+  file has a time that is 25 s different. Its SHA-256 is the same. The
+  second card is a duplicate and needs no copy.
