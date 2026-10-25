@@ -477,10 +477,11 @@ Findings:
 
 Status:
 
-- 2026-10-24: started the image with the `recover-wd1tb` unit. It takes
-  about 2 h 20 min.
-- Next: check that the map shows 100% rescued. Seal the image with
-  `sha256sum` and `chmod 444`. Then attach the next pool member.
+- 2026-10-24: imaged with the `recover-wd1tb` unit, 16:01 to 19:57. 100%
+  rescued, 0 read errors, about 70 MB/s. SMART after: 0 reallocated, 0
+  pending. Sealed: `chmod 444`, SHA-256 `28b4d3d1…5340` in
+  `image.img.sha256`. The image uses 620 GiB on disk because it is sparse.
+- The drive is off den. Next: devid 2, the WD Red 4 TB.
 
 ### sdf-sdcard-512gb
 
