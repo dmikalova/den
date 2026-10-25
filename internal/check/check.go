@@ -90,6 +90,10 @@ func List(user string) []Check {
 		// quadlet and displays. Both have to be up for metrics to exist.
 		{"metrics agent running", `systemctl is-active beszel-agent`},
 		{"metrics answering", `curl -fsS -o /dev/null http://127.0.0.1:8090/`},
+
+		// Two instances of the agent orchestrator, personal and work.
+		{"paseo answering", `curl -fsS -o /dev/null http://127.0.0.1:6767/api/health`},
+		{"paseo-work answering", `curl -fsS -o /dev/null http://127.0.0.1:6768/api/health`},
 	}...)
 }
 

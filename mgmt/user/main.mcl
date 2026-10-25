@@ -91,14 +91,82 @@ file "/srv/cache/models/ollama/" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/beszel.container"],
 }
 
-exec "quadlets-v5" {
+# The Paseo instances, personal and work. Same image, separate credentials
+# and separate state. See docs/paseo.md.
+file "/home/dmikalova/.config/containers/systemd/paseo.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/paseo.container"),
+	mode => "0644",
+
+	Depend => File["/srv/cache/models/ollama/"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/paseo-work.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/paseo-work.container"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo.container"],
+}
+
+# The bind mount sources. The root layer makes the per-app directories in the
+# areas and gives them to this user.
+file "/srv/cache/paseo/workspace/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo-work.container"],
+}
+
+file "/srv/cache/paseo/worktrees/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo/workspace/"],
+}
+
+file "/srv/cache/paseo/cache/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo/worktrees/"],
+}
+
+file "/srv/cache/models/paseo/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo/cache/"],
+}
+
+file "/srv/cache/paseo-work/workspace/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/models/paseo/"],
+}
+
+file "/srv/cache/paseo-work/worktrees/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo-work/workspace/"],
+}
+
+file "/srv/cache/paseo-work/cache/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo-work/worktrees/"],
+}
+
+file "/srv/cache/models/paseo-work/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/paseo-work/cache/"],
+}
+
+exec "quadlets-v6" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
     Meta:retry => 3,
     Meta:delay => 15000,
     cmd => deploy.readfile("/files/scripts/quadlets.sh"),
     shell => "/bin/bash",
-    creates => "/home/dmikalova/.local/state/den/quadlets-v5",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v6",
 
-	Depend => File["/srv/cache/models/ollama/"],
+	Depend => File["/srv/cache/models/paseo-work/"],
 }

@@ -42,5 +42,16 @@ done
 # checks the manifest and returns immediately when the model is already local.
 podman exec ollama ollama pull qwen3:14b
 
+# Paseo reads its secrets from an env file that den-user-env.service writes.
+# On a new install that file comes at the first boot with the sealed key, and
+# [Install] starts Paseo then. Until that boot, there is nothing to start.
+for app in paseo paseo-work; do
+  if [ -f "/run/den-env/${app}.env" ]; then
+    systemctl --user restart "${app}.service"
+  else
+    echo "quadlets: /run/den-env/${app}.env is missing; ${app} starts at the next boot" >&2
+  fi
+done
+
 mkdir -p "${HOME}/.local/state/den"
-touch "${HOME}/.local/state/den/quadlets-v5"
+touch "${HOME}/.local/state/den/quadlets-v6"
