@@ -1,7 +1,8 @@
 [Unit]
-Description=Database dumps on the @dumps subvolume
-# Separate from @appdata because a dump is a consistent copy taken on purpose,
-# while a snapshot of a running database is only crash consistent.
+Description=Database dumps on the @db-dumps subvolume
+# Separate from @db because a dump is a consistent copy taken on purpose,
+# while a snapshot of a running database is only crash consistent. kopia
+# backs this up; it does not back up /srv/db.
 #
 # On the NVMe, not the pool. A dump is rewritten every night, and on the pool
 # each rewrite is a write that snapraid must take to parity, for data whose
@@ -11,9 +12,9 @@ Before=local-fs.target
 
 [Mount]
 What=/dev/mapper/den-root
-Where=/srv/dumps
+Where=/srv/db-dumps
 Type=btrfs
-Options=defaults,subvol=@dumps
+Options=defaults,subvol=@db-dumps
 
 [Install]
 WantedBy=local-fs.target

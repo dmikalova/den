@@ -22,12 +22,13 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | Path | kopia | Why |
 | --- | --- | --- |
 | `/srv/appdata` | yes | container state; small, irreplaceable |
-| `/srv/dumps` | yes | consistent database dumps; see below |
+| `/srv/db-dumps` | yes | consistent database dumps; see below |
+| `/srv/db` | no | live database files; the dumps are their backup |
 | `/mnt/storage` | yes | the array |
 | `/mnt/storage/recover` | no | **temporary**; raw images of old drives during extraction |
 | `/mnt/storage/restore` | no | **temporary**; files from old drives before validation; validated files move to `/mnt/storage/mess` |
 | `/mnt/storage/timemachine` | no | already a backup, and it churns; see [shares.md](shares.md) |
-| `/srv/models` | no | re-downloadable; paying to store it twice is waste |
+| `/srv/cache` | no | model weights, images, build output; re-downloadable, so paying to store it twice is waste |
 | `node_modules/`, `.terraform/` | no | anywhere; reinstalled from a lockfile |
 
 The exclusions live in [mgmt/files/usr/local/bin/den-kopia](../mgmt/files/usr/local/bin/den-kopia).
@@ -37,10 +38,12 @@ SnapRAID also excludes `/recover/` and `/restore/` in
 the extraction is finished. The extraction procedure and the
 cleanup steps are in [restore.md](restore.md).
 
-`/srv/dumps` is the `@dumps` subvolume on the NVMe, beside `@appdata`. A
-snapshot of a running database in `/srv/appdata` is only crash consistent. A
+[storage.md](storage.md) says which area each kind of data goes in.
+
+`/srv/db-dumps` is the `@db-dumps` subvolume on the NVMe. A
+copy of a running database in `/srv/db` is only crash consistent. A
 dump is consistent because it is taken on purpose. A service with a database
-writes its dump to `/srv/dumps` before `kopia-backup.timer` fires. Nothing does
+writes its dump to `/srv/db-dumps` before `kopia-backup.timer` fires. Nothing does
 this yet.
 
 ## Retention

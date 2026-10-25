@@ -22,6 +22,7 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
 | `internal/progress`    | Progress reporting for the long-running commands         |
 | `internal/remote`      | Running a script on den over ssh                         |
 | `internal/secrets`     | The key names den reads out of the GCP secrets           |
+| `internal/storage`     | The storage layout that the tests and `den check` use    |
 | `internal/tailnet`     | Clearing a reinstall's stale node from the tailnet       |
 | `internal/usbdisk`     | Finding a removable disk and writing an image to it      |
 
@@ -38,6 +39,11 @@ Run `mage ci:fix && mage ci:check` before calling work done. It must print
   `den-secrets.service` explodes into `/run/den/secrets`. A unit names what it
   needs with `LoadCredential=`, so the unit file is the allowlist. Do not add
   a path that reads a secret some other way.
+- **Data goes in a storage area, never in a new subvolume.** Read
+  [docs/storage.md](docs/storage.md) before you add a quadlet or a path that
+  holds data. Each quadlet `Volume=` source is under `/srv/appdata`,
+  `/srv/db`, `/srv/db-dumps`, `/srv/cache` or `/mnt/storage`. No named
+  volumes. `internal/storage` tests this.
 - **No self-hosted service is a bootstrap dependency of the host that runs
   it.** Config comes from GitHub. The secrets root is Bitwarden.
 - **Nothing is trusted until tested.** Drives burn in before they hold data.

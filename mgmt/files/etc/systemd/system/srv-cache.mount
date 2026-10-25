@@ -1,0 +1,16 @@
+[Unit]
+Description=Data that can be made again, on the @cache subvolume
+# No snapshots and no backup. Everything here is a download or a build output:
+# the container image store, model weights, worktrees, thumbnails. Snapshots
+# would keep every deleted gigabyte, and a backup would pay to store a copy of
+# something the internet hands back.
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/srv/cache
+Type=btrfs
+Options=defaults,subvol=@cache
+
+[Install]
+WantedBy=local-fs.target

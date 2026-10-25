@@ -43,4 +43,4 @@ done
 podman exec ollama ollama pull qwen3:14b
 
 mkdir -p "${HOME}/.local/state/den"
-touch "${HOME}/.local/state/den/quadlets-v4"
+touch "${HOME}/.local/state/den/quadlets-v5"

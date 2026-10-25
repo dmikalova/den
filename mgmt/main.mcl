@@ -180,12 +180,12 @@ exec "enable-linger" {
 #
 # The split is what makes a snapper rollback of / safe: without @home, rolling
 # the root subvolume back takes the home directory with it.
-exec "btrfs-subvols-v2" {
+exec "btrfs-subvols-v3" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-subvols.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/btrfs-subvols-v2",
+	creates => "/var/lib/den/btrfs-subvols-v3",
 
 	Depend => File["/var/lib/den/"],
 }
@@ -208,29 +208,52 @@ file "/etc/systemd/system/srv-appdata.mount" {
 	mode => "0644",
 }
 
-file "/etc/systemd/system/srv-dumps.mount" {
+file "/etc/systemd/system/srv-db.mount" {
 	state => "exists",
-	content => deploy.readfile("/files/etc/systemd/system/srv-dumps.mount"),
+	content => deploy.readfile("/files/etc/systemd/system/srv-db.mount"),
 	mode => "0644",
 }
 
-file "/etc/systemd/system/srv-models.mount" {
+# systemd names a mount unit after its path with each "-" escaped, so
+# /srv/db-dumps is srv-db\x2ddumps.mount. srv-db-dumps.mount would be /srv/db/dumps.
+file "/etc/systemd/system/srv-db\\x2ddumps.mount" {
 	state => "exists",
-	content => deploy.readfile("/files/etc/systemd/system/srv-models.mount"),
+	content => deploy.readfile("/files/etc/systemd/system/srv-db\\x2ddumps.mount"),
+	mode => "0644",
+}
+
+file "/etc/systemd/system/srv-cache.mount" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/srv-cache.mount"),
 	mode => "0644",
 }
 
 # Mount units rather than fstab entries: fstab is written by the installer with
 # install-time UUIDs, so mgmt owning it would fight a rebuild. /dev/mapper/den-root
 # is named by the autoinstall template, which is in this repo, so it is stable.
-exec "btrfs-mounts-v2" {
+#
+# v3 also moves a den from before docs/storage.md onto the new layout. It
+# unmounts the old subvolumes first, so the old unit files go only after it.
+exec "btrfs-mounts-v3" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/btrfs-mounts.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/btrfs-mounts-v2",
+	creates => "/var/lib/den/btrfs-mounts-v3",
 
-	Depend => Exec["btrfs-subvols-v2"],
+	Depend => Exec["btrfs-subvols-v3"],
+}
+
+file "/etc/systemd/system/srv-dumps.mount" {
+	state => "absent",
+
+	Depend => Exec["btrfs-mounts-v3"],
+}
+
+file "/etc/systemd/system/srv-models.mount" {
+	state => "absent",
+
+	Depend => Exec["btrfs-mounts-v3"],
 }
 
 # The bulk storage: three btrfs data drives pooled with mergerfs, one ext4
@@ -245,7 +268,7 @@ file "/etc/systemd/system/mnt-disk1.mount" {
 	content => deploy.readfile("/files/etc/systemd/system/mnt-disk1.mount"),
 	mode => "0644",
 
-	Depend => Exec["btrfs-mounts-v2"],
+	Depend => Exec["btrfs-mounts-v3"],
 }
 
 file "/etc/systemd/system/mnt-disk2.mount" {
@@ -292,7 +315,7 @@ exec "storage-mounts-v2" {
 	Depend => File["/etc/systemd/system/mnt-storage.mount"],
 }
 
-# Snapshots of /, /home, /srv/appdata and the data disks. Must follow the
+# Snapshots of /, /home, /srv/appdata, /srv/db and the data disks. Must follow the
 # mounts: each config points at a subvolume, and an unmounted /srv/appdata is
 # just a directory on @.
 #
@@ -331,12 +354,20 @@ file "/etc/snapper/configs/appdata" {
 	Depend => File["/etc/snapper/configs/home"],
 }
 
+file "/etc/snapper/configs/db" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/snapper/configs/db"),
+	mode => "0640",
+
+	Depend => File["/etc/snapper/configs/appdata"],
+}
+
 file "/etc/snapper/configs/disk1" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/snapper/configs/disk1"),
 	mode => "0640",
 
-	Depend => File["/etc/snapper/configs/appdata"],
+	Depend => File["/etc/snapper/configs/db"],
 }
 
 file "/etc/snapper/configs/disk2" {
@@ -363,12 +394,12 @@ file "/etc/default/snapper" {
 	Depend => File["/etc/snapper/configs/disk3"],
 }
 
-exec "snapper-subvols-v1" {
+exec "snapper-subvols-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/snapper-subvols.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/snapper-subvols-v1",
+	creates => "/var/lib/den/snapper-subvols-v2",
 
 	Depend => File["/etc/default/snapper"],
 }
@@ -389,7 +420,7 @@ file "/mnt/storage/README.txt" {
 	content => deploy.readfile("/files/mnt/storage/README.txt"),
 	mode => "0644",
 
-	Depend => Exec["snapper-subvols-v1"],
+	Depend => Exec["snapper-subvols-v2"],
 }
 
 # Parity for the pooled drives. snapraid is not a backup and does not pretend

@@ -1,0 +1,16 @@
+[Unit]
+Description=Live database files on the @db subvolume
+# Snapper takes timeline snapshots of it, for a fast local rollback such as
+# before an upgrade. kopia does not read it: a copy of running database files
+# is only crash consistent. Each database writes a dump to /srv/db-dumps, and
+# that dump is what goes offsite.
+Before=local-fs.target
+
+[Mount]
+What=/dev/mapper/den-root
+Where=/srv/db
+Type=btrfs
+Options=defaults,subvol=@db
+
+[Install]
+WantedBy=local-fs.target

@@ -40,6 +40,15 @@ _Avoid:_ boot drive, system disk.
 **array** — the four hard drives together: one parity disk and three data
 disks, pooled by mergerfs at `/mnt/storage`.
 
+**area** — one storage policy and the path where it is mounted:
+`/srv/appdata`, `/srv/db`, `/srv/db-dumps`, `/srv/cache` or the array. Each
+is one subvolume, and each app gets a directory in it. See docs/storage.md.
+_Avoid:_ volume, when an area is meant. A **volume** is a quadlet's bind
+mount.
+
+**dump** — a consistent copy of a database, written on purpose to
+`/srv/db-dumps`. It is what kopia backs up for a database.
+
 **parity** — the SnapRAID parity disk. It is not a RAID member and it is not
 a backup.
 
