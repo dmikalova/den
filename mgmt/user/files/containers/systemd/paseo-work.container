@@ -1,0 +1,51 @@
+[Unit]
+Description=Paseo, the agent orchestrator (work)
+# The home directory is on /srv/appdata and the work trees are on /srv/cache.
+# A missing bind source would be made as an empty directory, and Paseo would
+# start with no state.
+RequiresMountsFor=/srv/appdata /srv/cache
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=paseo-work
+# Pinned. Renovate bumps it after the paseo repo releases a new image.
+Image=ghcr.io/dmikalova/paseo:0.2.0
+# The image user paseo is UID 1000. keep-id maps dmikalova to that UID, so the
+# entrypoint starts as paseo and needs no root, and the files on the bind
+# mounts are owned by dmikalova on den. This overrides the shared hardening.
+UserNS=keep-id:uid=1000,gid=1000
+# The agent home: Paseo state, agent sessions and settings. It is backed up.
+Volume=/srv/appdata/paseo-work:/home/paseo
+# The clones and the work trees. Agents push often, so den can make them again.
+Volume=/srv/cache/paseo-work/workspace:/workspace
+Volume=/srv/cache/paseo-work/worktrees:/home/paseo/.paseo/worktrees
+# The download caches for go, npm and pnpm.
+Volume=/srv/cache/paseo-work/cache:/home/paseo/.cache
+# The speech models that Paseo downloads on its first start.
+Volume=/srv/cache/models/paseo-work:/home/paseo/.paseo/models
+# Loopback only. Caddy is the way in, at paseo-work.den.mklv.tech.
+PublishPort=127.0.0.1:6768:6767
+# Paseo refuses a Host header that it does not know.
+Environment=PASEO_HOSTNAMES=paseo-work.den.mklv.tech
+# Every commit is by the owner. The managed settings in the image remove the
+# agent attribution.
+Environment="GIT_AUTHOR_NAME=David Mikalova"
+Environment=GIT_AUTHOR_EMAIL=324548+dmikalova@users.noreply.github.com
+Environment="GIT_COMMITTER_NAME=David Mikalova"
+Environment=GIT_COMMITTER_EMAIL=324548+dmikalova@users.noreply.github.com
+# PASEO_PASSWORD, CLAUDE_CODE_OAUTH_TOKEN and GH_TOKEN. den-user-env.service
+# writes this file from the secrets path. See docs/paseo.md.
+EnvironmentFile=/run/den-env/paseo-work.env
+# Agents build and test in /tmp.
+Tmpfs=/tmp:rw,exec,nosuid,nodev,size=4g
+
+[Service]
+Restart=always
+# The first start pulls the image, which is about a gigabyte.
+TimeoutStartSec=600
+# A stop gives running agents time to write their state.
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

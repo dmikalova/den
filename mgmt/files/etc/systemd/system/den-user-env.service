@@ -1,0 +1,31 @@
+[Unit]
+Description=Write the secret environment files for den's rootless apps
+After=den-secrets.service
+Requires=den-secrets.service
+# The quadlets read these files when the container starts. The user manager
+# starts them, so it waits for this unit.
+Before=user@1000.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/den-user-env
+
+# The allowlist. A name is <app>.<VARIABLE>, and the script writes VARIABLE
+# into /run/den-env/<app>.env. Nothing else in /run/den/secrets reaches the
+# user layer.
+LoadCredential=paseo.PASEO_PASSWORD:/run/den/secrets/PASEO_PASSWORD
+LoadCredential=paseo.CLAUDE_CODE_OAUTH_TOKEN:/run/den/secrets/PASEO_CLAUDE_CODE_OAUTH_TOKEN
+LoadCredential=paseo.GH_TOKEN:/run/den/secrets/PASEO_GH_TOKEN
+LoadCredential=paseo-work.PASEO_PASSWORD:/run/den/secrets/PASEO_WORK_PASSWORD
+LoadCredential=paseo-work.CLAUDE_CODE_OAUTH_TOKEN:/run/den/secrets/PASEO_WORK_CLAUDE_CODE_OAUTH_TOKEN
+LoadCredential=paseo-work.GH_TOKEN:/run/den/secrets/PASEO_WORK_GH_TOKEN
+
+# tmpfs, so the files never reach the disk. The directory is readable, and
+# each file is 0600 and owned by the user that runs the app.
+RuntimeDirectory=den-env
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1076,3 +1076,52 @@ exec "beszel-agent-units-v1" {
 	Depend => File["/etc/systemd/system/beszel-agent.service"],
 }
 
+
+# The ground under the Paseo quadlets.
+#
+# The user layer cannot make a directory in an area, because the areas are
+# owned by root. Each Paseo instance gets its home on /srv/appdata, which is
+# backed up, and its work trees and caches on /srv/cache, which are not. See
+# docs/paseo.md.
+exec "paseo-dirs-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
+	cmd => "install -d -o dmikalova -g dmikalova /srv/appdata/paseo /srv/appdata/paseo-work /srv/cache/paseo /srv/cache/paseo-work && touch /var/lib/den/paseo-dirs-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/paseo-dirs-v1",
+
+	Depend => Exec["beszel-agent-units-v1"],
+}
+
+# The secrets for the rootless apps. A quadlet cannot use LoadCredential=, so
+# this root unit writes an env file that only the login user can read.
+file "/usr/local/bin/den-user-env" {
+	state => "exists",
+	content => deploy.readfile("/files/usr/local/bin/den-user-env"),
+	mode => "0755",
+
+	Depend => Exec["paseo-dirs-v1"],
+}
+
+file "/etc/systemd/system/den-user-env.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-user-env.service"),
+	mode => "0644",
+
+	Depend => File["/usr/local/bin/den-user-env"],
+}
+
+# Started only when the secrets path is up. On a new install the sealed key
+# is not there yet, and the next boot starts the unit. On a running den,
+# den-secrets fetches again first, so that a key added in the infrastructure
+# repo is there. A missing key fails here, which is where it is easy to see.
+# Bump the version for a unit change or a new key.
+exec "den-user-env-units-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
+	cmd => "systemctl daemon-reload && systemctl enable den-user-env.service && if systemctl is-active -q den-secrets.service; then systemctl restart den-secrets.service den-user-env.service; fi && touch /var/lib/den/den-user-env-units-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/den-user-env-units-v1",
+
+	Depend => File["/etc/systemd/system/den-user-env.service"],
+}

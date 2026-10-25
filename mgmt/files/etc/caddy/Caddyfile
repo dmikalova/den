@@ -49,6 +49,17 @@ den.mklv.tech, *.den.mklv.tech {
 		reverse_proxy 127.0.0.1:8090
 	}
 
+	# Paseo has its own password. The proxy carries its WebSocket as is.
+	@paseo host paseo.den.mklv.tech
+	handle @paseo {
+		reverse_proxy 127.0.0.1:6767
+	}
+
+	@paseo-work host paseo-work.den.mklv.tech
+	handle @paseo-work {
+		reverse_proxy 127.0.0.1:6768
+	}
+
 	# den.mklv.tech itself, and anything under it without an app.
 	handle {
 		root * /srv/www/den

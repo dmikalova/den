@@ -1,0 +1,36 @@
+#!/bin/bash
+# Rootless podman cannot read /run/den/secrets, which is 0700 root. This
+# copies the credentials that den-user-env.service grants into one env file
+# per app, owned by the login user, for a quadlet's EnvironmentFile=.
+#
+# A credential name is <app>.<VARIABLE>. The unit file is the allowlist.
+#
+# Run by den-user-env.service, which is what grants the credentials.
+set -euo pipefail
+
+creds=${CREDENTIALS_DIRECTORY:?run this through den-user-env.service}
+user=dmikalova
+out=/run/den-env
+
+declare -A files=()
+for path in "$creds"/*; do
+  name=$(basename "$path")
+  app=${name%%.*}
+  var=${name#*.}
+  value=$(<"$path")
+  # podman reads an env file literally, one line per variable. A value with a
+  # newline would become two variables.
+  if [[ $value == *$'\n'* ]]; then
+    echo "den-user-env: $name has a newline" >&2
+    exit 1
+  fi
+  files[$app]+="$var=$value"$'\n'
+done
+
+for app in "${!files[@]}"; do
+  tmp=$(mktemp "$out/.$app.XXXXXX")
+  printf '%s' "${files[$app]}" >"$tmp"
+  chown "$user:$user" "$tmp"
+  chmod 0600 "$tmp"
+  mv -f "$tmp" "$out/$app.env"
+done
