@@ -44,17 +44,18 @@ gap:
    `dmikalova`, and has mode `0600`.
 3. The quadlet reads the file with `EnvironmentFile=`.
 
-The keys are in the `den-host` secret, from `secrets/den.sops.json` in the
-infrastructure repo:
+The values are in `secrets/paseo.sops.json` in the infrastructure repo. `DM_`
+is the personal instance and `GS_` is the work instance. The infrastructure
+repo copies them into the `den-host` secret:
 
-| Key in `den-host`                     | Variable in the container |
-| ------------------------------------- | ------------------------- |
-| `PASEO_PASSWORD`                      | `PASEO_PASSWORD`          |
-| `PASEO_CLAUDE_CODE_OAUTH_TOKEN`       | `CLAUDE_CODE_OAUTH_TOKEN` |
-| `PASEO_GH_TOKEN`                      | `GH_TOKEN`                |
-| `PASEO_WORK_PASSWORD`                 | `PASEO_PASSWORD`          |
-| `PASEO_WORK_CLAUDE_CODE_OAUTH_TOKEN`  | `CLAUDE_CODE_OAUTH_TOKEN` |
-| `PASEO_WORK_GH_TOKEN`                 | `GH_TOKEN`                |
+| Key in `paseo.sops.json`     | Key in `den-host`                    | Variable in the container |
+| ---------------------------- | ------------------------------------ | ------------------------- |
+| `DM_PASSWORD`                | `PASEO_PASSWORD`                     | `PASEO_PASSWORD`          |
+| `DM_CLAUDE_CODE_OAUTH_TOKEN` | `PASEO_CLAUDE_CODE_OAUTH_TOKEN`      | `CLAUDE_CODE_OAUTH_TOKEN` |
+| `DM_GH_TOKEN`                | `PASEO_GH_TOKEN`                     | `GH_TOKEN`                |
+| `GS_PASSWORD`                | `PASEO_WORK_PASSWORD`                | `PASEO_PASSWORD`          |
+| `GS_CLAUDE_CODE_OAUTH_TOKEN` | `PASEO_WORK_CLAUDE_CODE_OAUTH_TOKEN` | `CLAUDE_CODE_OAUTH_TOKEN` |
+| `GS_GH_TOKEN`                | `PASEO_WORK_GH_TOKEN`                | `GH_TOKEN`                |
 
 - `PASEO_PASSWORD` is the password for the web UI.
 - `CLAUDE_CODE_OAUTH_TOKEN` comes from `claude setup-token`. It uses the
@@ -68,7 +69,7 @@ Then bump the version of `den-user-env-units` in `mgmt/main.mcl`.
 
 ### Rotate a token
 
-1. Change the value in `secrets/den.sops.json` and apply the infrastructure
+1. Change the value in `secrets/paseo.sops.json` and apply the infrastructure
    repo.
 2. Fetch the secret again and write the env files:
 
