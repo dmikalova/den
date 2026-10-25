@@ -47,6 +47,7 @@ podman exec ollama ollama pull qwen3:14b
 # [Install] starts Paseo then. Until that boot, there is nothing to start.
 for app in paseo paseo-work; do
   if [ -f "/run/den-env/${app}.env" ]; then
+    systemctl --user reset-failed "${app}.service" || true
     systemctl --user restart "${app}.service"
   else
     echo "quadlets: /run/den-env/${app}.env is missing; ${app} starts at the next boot" >&2
@@ -54,4 +55,5 @@ for app in paseo paseo-work; do
 done
 
 mkdir -p "${HOME}/.local/state/den"
-touch "${HOME}/.local/state/den/quadlets-v6"
+rm -f "${HOME}"/.local/state/den/quadlets-v*
+touch "${HOME}/.local/state/den/quadlets-v7"

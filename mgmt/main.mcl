@@ -1083,12 +1083,16 @@ exec "beszel-agent-units-v1" {
 # owned by root. Each Paseo instance gets its home on /srv/appdata, which is
 # backed up, and its work trees and caches on /srv/cache, which are not. See
 # docs/paseo.md.
-exec "paseo-dirs-v1" {
+#
+# The home also gets the parents of the nested mounts. If they are missing,
+# podman makes them as root in the container, and the paseo user cannot write
+# to them.
+exec "paseo-dirs-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
-	cmd => "install -d -o dmikalova -g dmikalova /srv/appdata/paseo /srv/appdata/paseo-work /srv/cache/paseo /srv/cache/paseo-work && touch /var/lib/den/paseo-dirs-v1",
+	cmd => "for d in /srv/appdata/paseo /srv/appdata/paseo-work; do install -d -o dmikalova -g dmikalova -m 0755 $d $d/.cache $d/.paseo $d/.paseo/worktrees $d/.paseo/models; chown dmikalova:dmikalova $d/.cache $d/.paseo $d/.paseo/worktrees $d/.paseo/models; done && install -d -o dmikalova -g dmikalova /srv/cache/paseo /srv/cache/paseo-work && rm -f /var/lib/den/paseo-dirs-v1 && touch /var/lib/den/paseo-dirs-v2",
 	shell => "/bin/bash",
-	creates => "/var/lib/den/paseo-dirs-v1",
+	creates => "/var/lib/den/paseo-dirs-v2",
 
 	Depend => Exec["beszel-agent-units-v1"],
 }
@@ -1100,7 +1104,7 @@ file "/usr/local/bin/den-user-env" {
 	content => deploy.readfile("/files/usr/local/bin/den-user-env"),
 	mode => "0755",
 
-	Depend => Exec["paseo-dirs-v1"],
+	Depend => Exec["paseo-dirs-v2"],
 }
 
 file "/etc/systemd/system/den-user-env.service" {
