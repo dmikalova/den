@@ -404,25 +404,6 @@ exec "snapper-subvols-v2" {
 	Depend => File["/etc/default/snapper"],
 }
 
-# The canary that keeps the array non-empty.
-#
-# snapraid scrub exits non-zero against an array with no content, so a brand
-# new den reports a failing timer on its first Sunday for no reason at all.
-# One file through the pool is enough to make sync and scrub do real work, and
-# it also means the first scrub proves parity against a real byte.
-#
-# It is written through mergerfs rather than into a branch, so it lands wherever
-# the pool's create policy puts it, exactly like any other file. The dependency
-# on storage-mounts is what stops it being written into the empty mountpoint
-# before the pool is there.
-file "/mnt/storage/README.txt" {
-	state => "exists",
-	content => deploy.readfile("/files/mnt/storage/README.txt"),
-	mode => "0644",
-
-	Depend => Exec["snapper-subvols-v2"],
-}
-
 # Parity for the pooled drives. snapraid is not a backup and does not pretend
 # to be: it follows a deletion to parity on the next sync. What it buys is that
 # losing one drive costs nothing, which for 36 TB of bulk data is the difference
@@ -432,7 +413,7 @@ file "/etc/snapraid.conf" {
 	content => deploy.readfile("/files/etc/snapraid.conf"),
 	mode => "0644",
 
-	Depend => File["/mnt/storage/README.txt"],
+	Depend => Exec["snapper-subvols-v2"],
 }
 
 file "/etc/systemd/system/snapraid-sync.service" {
