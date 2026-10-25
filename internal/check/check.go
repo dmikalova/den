@@ -14,6 +14,8 @@ package check
 import (
 	"fmt"
 	"strings"
+
+	"github.com/dmikalova/den/v3/internal/storage"
 )
 
 // Check is one assertion. Test is shell that exits zero when the host is in
@@ -32,16 +34,13 @@ type Result struct {
 // List returns the smoke checks for a host whose login account is user.
 func List(user string) []Check {
 	store := fmt.Sprintf("/home/%s/.local/share/containers", user)
-	return []Check{
-		// FSROOT is the subvolume path, so this is both "is mounted" and "is
-		// the right subvolume" in one question.
-		{"root on @", `[ "$(findmnt -no FSROOT /)" = /@ ]`},
-		{"home on @home", `[ "$(findmnt -no FSROOT /home)" = /@home ]`},
-		{"containers on @containers", `[ "$(findmnt -no FSROOT ` + store + `)" = /@containers ]`},
-		{"appdata on @appdata", `[ "$(findmnt -no FSROOT /srv/appdata)" = /@appdata ]`},
-		{"dumps on @dumps", `[ "$(findmnt -no FSROOT /srv/dumps)" = /@dumps ]`},
-		{"models on @models", `[ "$(findmnt -no FSROOT /srv/models)" = /@models ]`},
-
+	checks := mounts()
+	// A bind mount's FSROOT is the subvolume plus the directory it binds.
+	checks = append(checks, Check{
+		"containers on " + storage.ContainerStore,
+		`[ "$(findmnt -no FSROOT ` + store + `)" = /@cache/containers ]`,
+	})
+	return append(checks, []Check{
 		// Installed is not the same as working: rootless podman fails on a
 		// missing subuid range or a store the user cannot write.
 		{"podman rootless", `[ "$(podman info --format '{{.Host.Security.Rootless}}')" = true ]`},
@@ -91,7 +90,24 @@ func List(user string) []Check {
 		// quadlet and displays. Both have to be up for metrics to exist.
 		{"metrics agent running", `systemctl is-active beszel-agent`},
 		{"metrics answering", `curl -fsS -o /dev/null http://127.0.0.1:8090/`},
+	}...)
+}
+
+// mounts checks that each area in the storage layout is mounted from its
+// subvolume. FSROOT is the subvolume path, so this is both "is mounted" and
+// "is the right subvolume" in one question.
+func mounts() []Check {
+	var checks []Check
+	for _, a := range storage.Areas {
+		if a.Subvolume == "" {
+			continue
+		}
+		checks = append(checks, Check{
+			a.Path + " on " + a.Subvolume,
+			`[ "$(findmnt -no FSROOT ` + a.Path + `)" = /` + a.Subvolume + ` ]`,
+		})
 	}
+	return checks
 }
 
 // Script renders the checks as one shell program. It is one script rather than

@@ -1,9 +1,9 @@
 [Unit]
 Description=Ollama, the local model runner
-# The weights live on /srv/models, so the container must not start before that
+# The weights live on /srv/cache, so the container must not start before that
 # filesystem is there. A missing bind source would otherwise be created as an
 # empty directory and the models would look deleted.
-RequiresMountsFor=/srv/models
+RequiresMountsFor=/srv/cache
 After=network-online.target
 Wants=network-online.target
 
@@ -15,10 +15,10 @@ Image=docker.io/ollama/ollama:0.40.3
 # CDI, not a runtime wrapper: this container is rootless and cannot write the
 # device cgroup. The spec is regenerated each boot by nvidia-cdi-refresh.
 AddDevice=nvidia.com/gpu=all
-# Model weights are large and re-downloadable, which is why /srv/models is
-# excluded from backup. Keeping them outside the container means a version
+# Model weights are large and re-downloadable, which is why they are on
+# /srv/cache, which has no snapshots and no backup. Keeping them outside the container means a version
 # bump does not re-download them.
-Volume=/srv/models/ollama:/root/.ollama
+Volume=/srv/cache/models/ollama:/root/.ollama
 # Loopback only. The API has no authentication, so nothing but den talks to it
 # directly; anything off-host goes through Caddy on the tailnet.
 PublishPort=127.0.0.1:11434:11434

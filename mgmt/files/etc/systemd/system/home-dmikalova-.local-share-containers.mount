@@ -1,15 +1,17 @@
 [Unit]
-Description=Container image and layer store on the @containers subvolume
-# Never snapshotted: nested subvolumes do not recurse, and image layers are
-# re-pullable rather than worth keeping history for.
+Description=Container image and layer store, bound from /srv/cache/containers
+# A bind mount keeps podman on its default path, so nothing has to be told
+# where the store is. The store is on @cache because image layers are
+# re-pullable and not worth snapshots or a backup. Nested under @home it would
+# ride along with every snapshot of /home.
 Before=local-fs.target
-RequiresMountsFor=/home
+RequiresMountsFor=/home /srv/cache
 
 [Mount]
-What=/dev/mapper/den-root
+What=/srv/cache/containers
 Where=/home/dmikalova/.local/share/containers
-Type=btrfs
-Options=defaults,subvol=@containers
+Type=none
+Options=bind
 
 [Install]
 WantedBy=local-fs.target

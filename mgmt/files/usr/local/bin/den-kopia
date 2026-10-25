@@ -38,13 +38,17 @@ export KOPIA_CONFIG_PATH=/var/lib/kopia/repository.config
 export KOPIA_CHECK_FOR_UPDATES=false
 cache=/var/cache/kopia
 
-# Paths that are worth money or time to lose. /srv/models is deliberately
-# absent: a model file is a download, and paying to store a copy of something
-# the internet will hand back is the easiest way to make a backup too expensive
-# to keep.
+# Paths that are worth money or time to lose. See docs/storage.md.
+#
+# /srv/cache is deliberately absent: model weights and image layers are
+# downloads, and paying to store a copy of something the internet will hand
+# back is the easiest way to make a backup too expensive to keep.
+#
+# /srv/db is absent too. A copy of running database files is only crash
+# consistent; the dump each database writes to /srv/db-dumps is the backup.
 sources=(
 	/srv/appdata
-	/srv/dumps
+	/srv/db-dumps
 	/mnt/storage
 )
 

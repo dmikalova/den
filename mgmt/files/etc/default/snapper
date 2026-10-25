@@ -3,7 +3,7 @@
 ## Type:        string
 ## Default:     ""
 # List of snapper configurations.
-SNAPPER_CONFIGS="root home appdata disk1 disk2 disk3"
+SNAPPER_CONFIGS="root home appdata db disk1 disk2 disk3"
 
 # if you want to disable snapshot per install/upgrade, then set "yes"
 DISABLE_APT_SNAPSHOT="no"

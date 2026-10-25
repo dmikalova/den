@@ -9,7 +9,7 @@ set -euo pipefail
 # started it before the configs existed.
 systemctl try-restart snapperd.service
 
-for pair in root:/ home:/home appdata:/srv/appdata disk1:/mnt/disk1 disk2:/mnt/disk2 disk3:/mnt/disk3; do
+for pair in root:/ home:/home appdata:/srv/appdata db:/srv/db disk1:/mnt/disk1 disk2:/mnt/disk2 disk3:/mnt/disk3; do
   cfg=${pair%%:*}
   snaps="${pair#*:}"
   snaps="${snaps%/}/.snapshots"
@@ -24,4 +24,4 @@ for pair in root:/ home:/home appdata:/srv/appdata disk1:/mnt/disk1 disk2:/mnt/d
   fi
 done
 
-touch /var/lib/den/snapper-subvols-v1
+touch /var/lib/den/snapper-subvols-v2

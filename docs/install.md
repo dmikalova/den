@@ -249,6 +249,8 @@ subvolumes on the first apply.
 | `@`       | `/`     | a snapshot of root can be rolled back     |
 | `@swap`   | `/swap` | a swapfile blocks snapshots of its volume |
 
+The subvolumes that mgmt makes are in [storage.md](storage.md).
+
 **Swap.** The swapfile is made by the install, because `@swap` must exist
 before the tree moves into `@`. zram is made by mgmt, because it is a package
 and a config file. zram has the higher priority, so cold pages compress into
