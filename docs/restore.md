@@ -329,7 +329,7 @@ model.
 
 | devid | Old name | Drive | Serial | dev_uuid | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | imaging; see the drive log |
+| 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | imaged and sealed; see the drive log |
 | 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaged and sealed; see the drive log |
 | 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | unknown | not found yet |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
@@ -536,8 +536,12 @@ Status:
 - 2026-10-25 20:42: started the image with the `recover-seagate1` unit.
   Pass 1 (`-n`) skips the bad areas. Pass 2 (`-d -r3`) retries them. The
   first estimate is about 4.5 h.
-- Next: read the map. Record the bad areas. Seal the image. Attach the last
-  pool member, devid 3, the other Seagate.
+- 2026-10-26 06:47: the image finished. ddrescue rescued all
+  3,000,592,982,016 bytes. 0 bad bytes, 0 read errors. A clean read.
+  Detached the drive. The `seal-seagate1` unit saved `smart-after.txt` and
+  seals the image.
+- Next: record the seal hash. Attach the last pool member, devid 3, the
+  other Seagate.
 
 ### sde-wd-WCC4E7HP6U7J
 
