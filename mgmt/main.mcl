@@ -1122,12 +1122,12 @@ file "/etc/systemd/system/den-user-env.service" {
 # Bump the version for a unit change or a new key. The user layer can restart
 # the quadlets before this writes the env files, so this restarts the running
 # apps after it writes them.
-exec "den-user-env-units-v3" {
+exec "den-user-env-units-v4" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
-	cmd => "systemctl daemon-reload && systemctl enable den-user-env.service && if systemctl is-active -q den-secrets.service; then systemctl restart den-secrets.service den-user-env.service && systemctl --user --machine=dmikalova@.host try-restart paseo.service paseo-work.service; fi && rm -f /var/lib/den/den-user-env-units-v* && touch /var/lib/den/den-user-env-units-v3",
+	cmd => "systemctl daemon-reload && systemctl enable den-user-env.service && if systemctl is-active -q den-secrets.service; then systemctl restart den-secrets.service den-user-env.service && systemctl --user --machine=dmikalova@.host try-restart paseo.service paseo-work.service; fi && rm -f /var/lib/den/den-user-env-units-v* && touch /var/lib/den/den-user-env-units-v4",
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-user-env-units-v3",
+	creates => "/var/lib/den/den-user-env-units-v4",
 
 	Depend => File["/etc/systemd/system/den-user-env.service"],
 }

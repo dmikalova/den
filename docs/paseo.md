@@ -78,9 +78,11 @@ repo copies them into the `den-host` secret:
 | `DM_PASSWORD`                | `PASEO_PASSWORD`                     | `PASEO_PASSWORD`          |
 | `DM_CLAUDE_CODE_OAUTH_TOKEN` | `PASEO_CLAUDE_CODE_OAUTH_TOKEN`      | `CLAUDE_CODE_OAUTH_TOKEN` |
 | `DM_GH_TOKEN`                | `PASEO_GH_TOKEN`                     | `GH_TOKEN`                |
+| `DM_NOTION_TOKEN`            | `PASEO_NOTION_TOKEN`                 | `NOTION_TOKEN`            |
 | `GS_PASSWORD`                | `PASEO_WORK_PASSWORD`                | `PASEO_PASSWORD`          |
 | `GS_CLAUDE_CODE_OAUTH_TOKEN` | `PASEO_WORK_CLAUDE_CODE_OAUTH_TOKEN` | `CLAUDE_CODE_OAUTH_TOKEN` |
 | `GS_GH_TOKEN`                | `PASEO_WORK_GH_TOKEN`                | `GH_TOKEN`                |
+| `GS_NOTION_TOKEN`            | `PASEO_WORK_NOTION_TOKEN`            | `NOTION_TOKEN`            |
 
 - `PASEO_PASSWORD` is the password for the web UI.
 - `CLAUDE_CODE_OAUTH_TOKEN` comes from `claude setup-token`. It uses the
@@ -88,6 +90,10 @@ repo copies them into the `den-host` secret:
 - `GH_TOKEN` is a fine-grained personal access token. Give it access to only
   the repositories that the instance works on. git uses it through
   `gh auth git-credential`.
+- `NOTION_TOKEN` is a Notion internal integration token. The image adds the
+  Notion MCP server to Claude Code and to `agy` with it. Share each page that
+  agents need with the integration. If the value is empty, the instance has no
+  Notion server.
 
 The commit signing key is a den secret, not a Paseo secret. Other systems can
 use the same key. It is the `id_dmikalova` SSH key in `secrets/ssh.sops.json`
