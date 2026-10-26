@@ -1,7 +1,7 @@
 # Paseo
 
 Paseo is the agent orchestrator on den. It runs coding agents (Claude Code and
-Gemini CLI) in work trees and serves a web UI. The design is in Notion.
+Antigravity CLI) in work trees and serves a web UI. The design is in Notion.
 
 den runs two instances. They use the same image, with separate credentials and
 separate state.
@@ -132,23 +132,26 @@ the `quadlets` version in
 `mgmt/user/main.mcl` and in `mgmt/user/files/scripts/quadlets.sh`, so that
 the instances restart on the new image.
 
-## Log in to Gemini
+## Log in to Antigravity
 
-The Gemini CLI uses a Google login. The login cannot be automated. Run this
-once for each instance from a computer that has SSH access to den:
+Google AI Pro plans work only in the Antigravity CLI (`agy`). Gemini CLI
+stopped serving these plans on 2026-06-18. The image setup installs `agy` in
+the agent home. The login cannot be automated. Run this once for each instance
+from a computer that has SSH access to den:
 
 ```sh
-ssh -t den podman exec -it -e NO_BROWSER=true paseo gemini
+ssh -t den podman exec -it paseo /home/paseo/.local/bin/agy
 ```
 
 For the work instance, use `paseo-work` in place of `paseo`.
 
-1. Select "Sign in with Google".
+1. Select "Google OAuth".
 2. Open the URL in a browser and log in.
 3. Paste the code back into the terminal.
-4. Type `/quit`.
+4. Press Ctrl+C two times.
 
-The credentials are in `~/.gemini` in the agent home, which is backed up.
+The credentials are in `~/.gemini/oauth_creds.json` in the agent home, which
+is backed up.
 
 ## Local models
 

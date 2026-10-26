@@ -10,7 +10,7 @@ Wants=network-online.target
 [Container]
 ContainerName=paseo
 # Pinned. Renovate bumps it after the paseo repo releases a new image.
-Image=ghcr.io/dmikalova/paseo:0.6.1
+Image=ghcr.io/dmikalova/paseo:1.0.0
 # The image user paseo is UID 1000. keep-id maps dmikalova to that UID, so the
 # entrypoint starts as paseo and needs no root, and the files on the bind
 # mounts are owned by dmikalova on den. This overrides the shared hardening.
@@ -38,7 +38,7 @@ Environment=GIT_COMMITTER_EMAIL=324548+dmikalova@users.noreply.github.com
 # the owners into /workspace and registers each one as a project. Only these
 # agent providers show in the UI.
 Environment=PASEO_SETUP_OWNERS=dmikalova
-Environment=PASEO_SETUP_PROVIDERS=claude,gemini
+Environment=PASEO_SETUP_PROVIDERS=claude,antigravity
 # The local provider runs Claude Code against Ollama on den. Ollama binds
 # 127.0.0.1 on den only. pasta -T forwards 127.0.0.1:11434 in the container to
 # that port on den.
