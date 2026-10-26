@@ -232,8 +232,9 @@ Never-written areas of the drive stay as zeros.
 | hardware enclosure | random from byte 0; the drive was in a USB enclosure with encryption | put the drive back in the original enclosure model, then image it again through that enclosure |
 | ecryptfs (Ubuntu encrypted home) | the filesystem mounts, but `home/<user>` has only `.Private` and `.ecryptfs` links, and `home/.ecryptfs/<user>/` exists | see [ecryptfs home folders](#ecryptfs-home-folders) |
 
-Hardware enclosures that encrypt every sector include the WD My Book, the
-Toshiba Canvio Desk and some Buffalo DriveStation models. The bridge board
+Hardware enclosures that encrypt every sector include the WD My Book and
+some Buffalo DriveStation models. The Toshiba Canvio Desk does not encrypt:
+its board passes the sectors through unchanged. The bridge board
 holds the key. A different USB adapter, or a new enclosure of the same model,
 reads only the ciphertext. Some of these enclosures encrypt even when no
 password was set.
@@ -393,12 +394,12 @@ Findings before imaging:
 - This is not LUKS, BitLocker, APFS or CoreStorage, because each of those has
   a plaintext header.
 - It is probably not VeraCrypt, because the last 128 KiB are not all random.
-- The most likely cause is a hardware encrypting enclosure. The high power
-  cycle count and the low power-on hours fit an external backup drive.
+- The high power cycle count and the low power-on hours fit an external
+  backup drive.
 
-The drive came from a Toshiba Canvio Desk (`HDWC120XK3J1`). Its USB bridge
-board encrypts every sector, and only that board can decrypt them. The board
-is kept, and only its cable is missing.
+The drive came from a Toshiba Canvio Desk (`HDWC120XK3J1`). The first theory
+was that the Canvio board encrypts every sector. That is not correct. See
+the 2026-10-25 status.
 
 Status:
 
@@ -409,6 +410,24 @@ Status:
   power supply if it is also missing. Put the drive back on its own board.
   Image it again through that board, into a new directory. That image is
   plaintext. Then delete the ciphertext image.
+- 2026-10-25: the user deleted the 222 GB ciphertext image before this
+  check.
+- 2026-10-25: attached the drive through its own Canvio Desk board (USB ID
+  `0480:d011`). The board gives the same bytes as the ASMedia adapter: random
+  from 0 to 49,725,767,680 bytes, then zeros, and random blocks in the last
+  13 MiB. ATA security is not enabled and not locked. The Canvio Desk has no
+  hardware encryption. Its "password protection" is the NTI backup software,
+  which encrypts files, not the drive.
+- 2026-10-25: the encryption is from software on the host. The user thinks a
+  Linux machine set up the drive. That points to plain dm-crypt, or LUKS with
+  a detached header. A VeraCrypt volume is also possible. The old server (the
+  OCZ image) has only `cryptswap1` in `/etc/crypttab`, and no history or key
+  file for this drive.
+- Next: the user tries passphrases with `/tmp/try-toshiba.sh` on den. The
+  script opens the drive read-only in 8 plain dm-crypt modes and in
+  VeraCrypt and TrueCrypt modes. It reports a match only if a filesystem or a
+  partition table appears. Image the drive only after a match. Only the
+  first 49.7 GB and the last 13 MiB hold data.
 
 ### ssd-ocz-vertex3-TF917I2JJP0YN2ST
 
