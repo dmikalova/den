@@ -331,7 +331,7 @@ model.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | imaged and sealed; see the drive log |
 | 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaged and sealed; see the drive log |
-| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | unknown | not found yet |
+| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500NWN8` | devid 3 in `btrfs-super.txt` | imaging; see the drive log |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
 
 Notes:
@@ -540,8 +540,34 @@ Status:
   3,000,592,982,016 bytes. 0 bad bytes, 0 read errors. A clean read.
   Detached the drive. The `seal-seagate1` unit saved `smart-after.txt` and
   seals the image.
-- Next: record the seal hash. Attach the last pool member, devid 3, the
-  other Seagate.
+- 2026-10-26: sealed. SHA-256 `787efee680253e07…c3a13673` in
+  `image.img.sha256`; `chmod 444` on the image, map, and hash file.
+
+### sde-seagate-Z500NWN8
+
+| | |
+| --- | --- |
+| Drive | Seagate ST3000DM001-1ER166, 3 TB, 7200 rpm, serial `Z500NWN8` |
+| SMART | passed; 27,473 power-on hours, 0 reallocated, 0 pending, 0 offline uncorrectable, 0 reported uncorrect, 0 CRC |
+| Image | `/mnt/disk1/data/recover/sde-seagate-Z500NWN8/image.img` (sparse) |
+| Files | `smart-before.txt`, `btrfs-super.txt` |
+
+Findings:
+
+- No partition table. The whole drive is one btrfs device.
+- devid 3 of the old `/mnt/data` pool, generation 128763. This is the last
+  pool member.
+- Same model and vintage as devid 1 (`Z500MRLD`). SMART is clean. The large
+  `Raw_Read_Error_Rate` and `Seek_Error_Rate` raw values are Seagate's
+  encoded counters, not real errors.
+
+Status:
+
+- 2026-10-26 13:59: started the image with the `recover-seagate3` unit.
+  Pass 1 (`-n`) skips the bad areas. Pass 2 (`-d -r3`) retries them. The
+  first estimate is about 3.75 h. `seal-seagate3` seals it after.
+- Next: record the result and seal hash. All four pool members are then
+  imaged. Mount the pool read-only from reflink copies.
 
 ### sde-wd-WCC4E7HP6U7J
 
