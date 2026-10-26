@@ -37,6 +37,27 @@ The work trees are not backed up. Agents push often, and den can clone again.
 The quadlet maps `dmikalova` to UID 1000 in the container, which is the image
 user `paseo`. Thus the files on den are owned by `dmikalova`.
 
+## Containers
+
+Agents run `docker` and `podman` in the container. This is rootless podman in
+the rootless Paseo container. The image side is in the Containers section of
+the paseo repo README. The den side is
+`mgmt/user/files/containers/systemd/paseo.container.d/20-nested-podman.conf`.
+mgmt writes it into the drop-in folder of each instance. It changes the shared
+hardening in these ways:
+
+- It adds `/dev/fuse` for `fuse-overlayfs`.
+- It adds the default podman capabilities to the bounding set. The image
+  entrypoint clears the ambient set, so Paseo and the agents have no effective
+  capabilities.
+- It turns off `NoNewPrivileges`, so `newuidmap` gets its file capabilities.
+- It unmasks `/proc` and turns off the SELinux label.
+
+All of this stays in the user namespace of `dmikalova`. Root in an inner
+container is a subordinate ID of `dmikalova` on den. The images are in
+`/srv/cache/<instance>/cache/containers`, with no backup. Files there belong
+to subordinate IDs. To remove them, use `podman unshare rm -rf <path>`.
+
 ## Secrets
 
 A quadlet cannot use `LoadCredential=`, and rootless podman cannot read

@@ -109,12 +109,41 @@ file "/home/dmikalova/.config/containers/systemd/paseo-work.container" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/paseo.container"],
 }
 
+# Nested rootless podman for both instances. One file, see it for why.
+file "/home/dmikalova/.config/containers/systemd/paseo.container.d/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo-work.container"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/paseo.container.d/20-nested-podman.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/paseo.container.d/20-nested-podman.conf"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo.container.d/"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/paseo-work.container.d/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo.container.d/20-nested-podman.conf"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/paseo-work.container.d/20-nested-podman.conf" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/paseo.container.d/20-nested-podman.conf"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo-work.container.d/"],
+}
+
 # The bind mount sources. The root layer makes the per-app directories in the
 # areas and gives them to this user.
 file "/srv/cache/paseo/workspace/" {
 	state => "exists",
 
-	Depend => File["/home/dmikalova/.config/containers/systemd/paseo-work.container"],
+	Depend => File["/home/dmikalova/.config/containers/systemd/paseo-work.container.d/20-nested-podman.conf"],
 }
 
 file "/srv/cache/paseo/worktrees/" {
@@ -159,14 +188,14 @@ file "/srv/cache/models/paseo-work/" {
 	Depend => File["/srv/cache/paseo-work/cache/"],
 }
 
-exec "quadlets-v10" {
+exec "quadlets-v11" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
     Meta:retry => 3,
     Meta:delay => 15000,
     cmd => deploy.readfile("/files/scripts/quadlets.sh"),
     shell => "/bin/bash",
-    creates => "/home/dmikalova/.local/state/den/quadlets-v10",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v11",
 
 	Depend => File["/srv/cache/models/paseo-work/"],
 }
