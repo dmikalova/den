@@ -10,7 +10,7 @@ Wants=network-online.target
 [Container]
 ContainerName=paseo
 # Pinned. Renovate bumps it after the paseo repo releases a new image.
-Image=ghcr.io/dmikalova/paseo:1.2.0
+Image=ghcr.io/dmikalova/paseo:1.3.0
 # The image user paseo is UID 1000. keep-id maps dmikalova to that UID, so the
 # entrypoint starts as paseo and needs no root, and the files on the bind
 # mounts are owned by dmikalova on den. This overrides the shared hardening.
