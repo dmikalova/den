@@ -569,7 +569,13 @@ Status:
   out of 3.07 TB means a few damaged files at most. btrfs checksums will
   name them when the pool mounts.
 - 2026-10-25: detached the drive. The `seal-wdred4tb` unit saved
-  `smart-after.txt` and sealed the image.
+  `smart-after.txt` and sealed the image. SHA-256
+  `0fb69ddbc845…bd1ed7e9` in `image.img.sha256`; `chmod 444` on the image,
+  map, and hash file.
+- 2026-10-25: `smart-after.txt` shows `Current_Pending_Sector` at 99, up
+  from 1. The pass 2 retries read the worn areas hard and flagged more
+  sectors as pending. The drive still reports PASSED and 0 reallocated. This
+  drive is a discard, so the higher pending count does not matter.
 
 ### sdf-sdcard-512gb
 
