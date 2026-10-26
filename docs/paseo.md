@@ -132,7 +132,39 @@ the `quadlets` version in
 `mgmt/user/main.mcl` and in `mgmt/user/files/scripts/quadlets.sh`, so that
 the instances restart on the new image.
 
-## Not done yet
+## Log in to Gemini
 
-- Local models: Ollama binds `127.0.0.1:11434` on den. The route from the
-  container to it is not set.
+The Gemini CLI uses a Google login. The login cannot be automated. Run this
+once for each instance from a computer that has SSH access to den:
+
+```sh
+ssh -t den podman exec -it -e NO_BROWSER=true paseo gemini
+```
+
+For the work instance, use `paseo-work` in place of `paseo`.
+
+1. Select "Sign in with Google".
+2. Open the URL in a browser and log in.
+3. Paste the code back into the terminal.
+4. Type `/quit`.
+
+The credentials are in `~/.gemini` in the agent home, which is backed up.
+
+## Local models
+
+The `local` provider runs Claude Code against Ollama on den. Ollama binds
+`127.0.0.1:11434` on den only. In each instance, `Network=pasta:-T,11434`
+forwards `127.0.0.1:11434` in the container to that port on den. Ollama serves
+the Anthropic messages API, so Claude Code needs no proxy.
+
+- `PASEO_SETUP_LOCAL_URL` sets the Ollama URL.
+- `PASEO_SETUP_LOCAL_MODELS` sets the model list. The first model is the
+  default.
+- The provider has no web search and no web fetch.
+
+To add a model, pull it into Ollama, then add it to `PASEO_SETUP_LOCAL_MODELS`
+in both `.container` files:
+
+```sh
+podman exec ollama ollama pull <model>
+```

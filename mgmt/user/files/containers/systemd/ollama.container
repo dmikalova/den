@@ -28,6 +28,11 @@ Environment=OLLAMA_KEEP_ALIVE=30m
 # One model at a time. The card has 20 GiB, and a second model loading beside
 # the first is how you get a silent fall back to CPU.
 Environment=OLLAMA_MAX_LOADED_MODELS=1
+# Agents send long prompts. The default context of 4096 tokens cuts them. A
+# 14B model with a 32k context and a q8_0 KV cache fits in the 20 GiB card.
+Environment=OLLAMA_CONTEXT_LENGTH=32768
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
 # ollama unpacks its runner binaries into /tmp on every start. Keeping that
 # out of the image layer costs nothing. The shared hardening lives in
 # container.d/10-hardening.conf; the read-only exception this service needs is
