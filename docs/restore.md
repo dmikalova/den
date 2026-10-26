@@ -423,11 +423,20 @@ Status:
   a detached header. A VeraCrypt volume is also possible. The old server (the
   OCZ image) has only `cryptswap1` in `/etc/crypttab`, and no history or key
   file for this drive.
-- Next: the user tries passphrases with `/tmp/try-toshiba.sh` on den. The
-  script opens the drive read-only in 8 plain dm-crypt modes and in
+- 2026-10-25: the user tried passphrases with `/tmp/try-toshiba.sh` on den.
+  The script opens the drive read-only in 8 plain dm-crypt modes and in
   VeraCrypt and TrueCrypt modes. It reports a match only if a filesystem or a
-  partition table appears. Image the drive only after a match. Only the
-  first 49.7 GB and the last 13 MiB hold data.
+  partition table appears. No passphrase gave a match.
+- 2026-10-25: ran `/tmp/toshiba-brute.sh`. It tested every 3-letter lowercase
+  prefix plus one fixed suffix against 2 plain dm-crypt modes: 35,152 tries
+  in 5,610 s. No match.
+- 2026-10-25: parked this drive. The automated sweep is done. A sweep can
+  only cover plain dm-crypt. It cannot cover LUKS with a detached header (the
+  header file is gone with the old laptop) or VeraCrypt (the slow KDF makes a
+  sweep take years). The drive most likely came from a laptop the user no
+  longer has. The data may already exist on the pool drives, or it is lost.
+  The user does not remember the contents. Do not image or sweep this drive
+  again unless the real passphrase or a detached header file turns up.
 
 ### ssd-ocz-vertex3-TF917I2JJP0YN2ST
 
