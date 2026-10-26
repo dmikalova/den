@@ -330,7 +330,7 @@ model.
 | devid | Old name | Drive | Serial | dev_uuid | Status |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | not found yet |
-| 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaging; see the drive log |
+| 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaged and sealed; see the drive log |
 | 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500MRLD` or `Z500NWN8` | unknown | not found yet |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
 
@@ -525,8 +525,14 @@ Status:
 
 - 2026-10-24 22:00: started the image with the `recover-wdred4tb` unit.
   Pass 1 (`-n`) skips the bad areas. Pass 2 (`-d -r3`) retries them.
-- Next: read the map. Record the bad areas. Seal the image. Attach the next
-  pool member.
+- 2026-10-25 20:34: the image finished after 22 h. ddrescue rescued
+  4,000,787,030,016 of 4,000,787,030,016 bytes. 306,176 bytes (299 KiB) in
+  84 small spots stayed unreadable. The bad spots are spread between 83 GB
+  and 2.8 TB in, which fits a worn drive, not a failing one. 299 KiB lost
+  out of 3.07 TB means a few damaged files at most. btrfs checksums will
+  name them when the pool mounts.
+- 2026-10-25: detached the drive. The `seal-wdred4tb` unit saved
+  `smart-after.txt` and sealed the image.
 
 ### sdf-sdcard-512gb
 
