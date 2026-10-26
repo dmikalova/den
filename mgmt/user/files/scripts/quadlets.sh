@@ -56,4 +56,4 @@ done
 
 mkdir -p "${HOME}/.local/state/den"
 rm -f "${HOME}"/.local/state/den/quadlets-v*
-touch "${HOME}/.local/state/den/quadlets-v14"
+touch "${HOME}/.local/state/den/quadlets-v15"
