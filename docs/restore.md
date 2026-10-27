@@ -331,7 +331,7 @@ model.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | imaged and sealed; see the drive log |
 | 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaged and sealed; see the drive log |
-| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500NWN8` | devid 3 in `btrfs-super.txt` | imaged, sealing; see the drive log |
+| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500NWN8` | devid 3 in `btrfs-super.txt` | imaged and sealed; see the drive log |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
 
 Notes:
@@ -392,6 +392,23 @@ investigation.
 The ZFS label is on partition 1, not the raw disk. The label `vdev_tree`
 names the raidz vdev and its 3 child disks by `/dev/disk/by-id` path, which
 gives the serials above.
+
+`zdb -l` and `zdb -lu` on the saved label of `Z5006GSW` show:
+
+- `state: 0` (active). The pool was not exported and not destroyed. Import
+  needs `-f`.
+- Pool GUID `5836723255957420361`, last txg 19,267,508.
+- `nparity: 1`. None of the 3 children is marked faulted or missing.
+- Features for read: only `hole_birth` and `embedded_data`. Any current
+  OpenZFS can read it.
+- The last uberblock is from 2016-03-28 15:09:43 UTC. This agrees with the
+  server records: the pool was retired on that day.
+
+To check the other 2 members, read their labels first. A matching pool GUID
+and a txg near 19,267,508 mean the 3 disks are consistent.
+
+Run `zdb` in a container. Debian `zfsutils-linux` is in `contrib`. `zdb` is
+user space and does not need the kernel module.
 
 To image and read this pool:
 
@@ -608,8 +625,12 @@ Status:
   The inner tracks read slow, so the real time was far over the first
   estimate. That is normal for this model. Detached the drive. The
   `seal-seagate3` unit saves `smart-after.txt` and seals the image.
-- Next: record the seal hash. All four pool members are then imaged. Mount
-  the pool read-only from reflink copies.
+- 2026-10-26: sealed. SHA-256 `87e808a38b4c50ae…2f6727e7` in
+  `image.img.sha256`; `chmod 444` on the image, map, and hash file. All four
+  pool members are now imaged and sealed.
+- 2026-10-26: the `mount-oldpool` unit (`/tmp/mount-oldpool.sh`) made the 4
+  reflink `work.img` copies, attached them read-only, and mounts the pool at
+  `/mnt/olddata`. The log is `/mnt/disk1/data/recover/oldpool-mount.log`.
 
 ### sde-seagate-Z5006GSW
 
