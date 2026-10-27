@@ -344,10 +344,11 @@ Notes:
 - At least one of devid 1 and devid 2 is necessary to read the chunk tree.
   How many of the 4 devices are necessary for the data depends on the data
   profile.
-- These drives were in the server only in 2016-03, and are not in the pool:
-  Seagate ST3000DM001 `Z50055EX`, `Z5006GSW` and `Z5006P1Z` (until
+- These drives were in the server only in 2016-03, and are not in the btrfs
+  pool: Seagate ST3000DM001 `Z50055EX`, `Z5006GSW` and `Z5006P1Z` (until
   2016-03-28), and WD Green WD15EADS 1.5 TB `WD-WMAVU0785064` (until
-  2016-03-19). They can hold older data from before the pool.
+  2016-03-19). The three Seagates are a separate, older ZFS raidz1 pool. See
+  "The old ZFS pool" below.
 - The Toshiba from the Canvio Desk was never in this server.
 
 To identify a drive, attach it and run:
@@ -371,6 +372,42 @@ When all the members that you can find are imaged, do these steps:
    Use `degraded` only if a member is missing.
 5. Read the profiles: `sudo btrfs filesystem df /mnt/olddata`.
 6. Continue at step 7 of the steps above.
+
+## The old ZFS pool
+
+Three Seagate ST3000DM001 drives form a separate, older pool. ZFS, not
+btrfs. They were in `dmikalova-server` only until 2016-03-28, so this pool
+predates the btrfs pool. The user says these three drives are a separate
+older set, and the partition or format may be damaged, so expect extra
+investigation.
+
+| | |
+| --- | --- |
+| Type | ZFS, raidz1, 3 disks, `ashift=12` |
+| Pool name | `data` |
+| Host | `dmikalova-server` |
+| Members | `Z50055EX`, `Z5006P1Z`, `Z5006GSW` (by `ata-ST3000DM001-1ER166_<serial>-part1`) |
+| Layout | GPT: part 1 = `zfs` (2.7 TiB), part 9 = reserved (8 MiB) |
+
+The ZFS label is on partition 1, not the raw disk. The label `vdev_tree`
+names the raidz vdev and its 3 child disks by `/dev/disk/by-id` path, which
+gives the serials above.
+
+To image and read this pool:
+
+1. Image each of the 3 members to its own `recover/` directory, same
+   ddrescue pattern as the btrfs pool.
+2. raidz1 tolerates 1 missing disk, so 2 of 3 images can still import the
+   pool. All 3 is best.
+3. Reflink a `work.img` of each image. Attach read-only with partition scan:
+   `sudo losetup -r -P -f --show work.img`. The ZFS partition is `loopNp1`.
+4. Install `zfsutils-linux` in a container, or on the host.
+5. Import read-only, no mount, by a scan directory of the loop partitions:
+   `sudo zpool import -d /dev/disk/by-loop-part -o readonly=on -N data`.
+   If the pool name or state is bad, use `zpool import -d <dir>` first to
+   list what ZFS sees, then `-f` if it needs a force, still `readonly=on`.
+6. `zfs list`, then mount the datasets read-only and inventory to
+   `~/data/restore/`.
 
 ## Drive log
 
@@ -573,6 +610,34 @@ Status:
   `seal-seagate3` unit saves `smart-after.txt` and seals the image.
 - Next: record the seal hash. All four pool members are then imaged. Mount
   the pool read-only from reflink copies.
+
+### sde-seagate-Z5006GSW
+
+| | |
+| --- | --- |
+| Drive | Seagate ST3000DM001-1ER166, 3 TB, 7200 rpm, serial `Z5006GSW` |
+| SMART | passed; 13,899 power-on hours, 29 power cycles, 0 reallocated, 0 pending, 0 offline uncorrectable, 0 reported uncorrect, 0 CRC |
+| Image | `/mnt/disk3/data/recover/sde-seagate-Z5006GSW/image.img` (sparse) |
+| Files | `smart-before.txt`, `gpt.txt`, `zfs-label0.bin` |
+
+Findings:
+
+- GPT, not a raw btrfs device. Part 1 is `zfs` (2.7 TiB). Part 9 is the 8 MiB
+  ZFS reserved partition.
+- Member of a 3-disk ZFS raidz1 pool named `data`, host `dmikalova-server`,
+  `ashift=12`. This is a separate, older pool from the btrfs `/mnt/data`
+  pool. See "The old ZFS pool".
+- The label `vdev_tree` names the 3 members by
+  `ata-ST3000DM001-1ER166_<serial>-part1`: `Z50055EX`, `Z5006P1Z`,
+  `Z5006GSW`.
+
+Status:
+
+- 2026-10-26 23:34: started the image with the `recover-zfs-Z5006GSW` unit.
+  Pass 1 (`-n`), then pass 2 (`-d -r3`). First estimate about 4.5 h.
+  `seal-zfs-Z5006GSW` detaches the drive and seals the image after.
+- Next: image the other 2 members (`Z50055EX`, `Z5006P1Z`). Then import the
+  pool read-only from reflink copies.
 
 ### sde-wd-WCC4E7HP6U7J
 
