@@ -331,7 +331,7 @@ model.
 | --- | --- | --- | --- | --- | --- |
 | 1 | `sdb` | Seagate ST3000DM001, 3 TB | `Z500MRLD` | `0619e0ff-4ee7-4cbf-bfa3-bab6efc4166e` | imaged and sealed; see the drive log |
 | 2 | `sdd` | WD Red WD40EFRX, 4 TB | `WD-WCC4E7HP6U7J` | `afd881a8-b886-4e15-ac86-2f7aea78d500` | imaged and sealed; see the drive log |
-| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500NWN8` | devid 3 in `btrfs-super.txt` | imaging; see the drive log |
+| 3 | `sdc` | Seagate ST3000DM001, 3 TB | `Z500NWN8` | devid 3 in `btrfs-super.txt` | imaged, sealing; see the drive log |
 | 4 | `sde` | WD Green WD10EARX, 1 TB | `WD-WMC0S1089686` | in `btrfs-super.txt` | imaged; see the drive log |
 
 Notes:
@@ -566,8 +566,13 @@ Status:
 - 2026-10-26 13:59: started the image with the `recover-seagate3` unit.
   Pass 1 (`-n`) skips the bad areas. Pass 2 (`-d -r3`) retries them. The
   first estimate is about 3.75 h. `seal-seagate3` seals it after.
-- Next: record the result and seal hash. All four pool members are then
-  imaged. Mount the pool read-only from reflink copies.
+- 2026-10-26 23:25: the image finished after about 9.5 h. ddrescue rescued
+  all 3,000,592,982,016 bytes. 0 bad bytes, 0 read errors. A clean read.
+  The inner tracks read slow, so the real time was far over the first
+  estimate. That is normal for this model. Detached the drive. The
+  `seal-seagate3` unit saves `smart-after.txt` and seals the image.
+- Next: record the seal hash. All four pool members are then imaged. Mount
+  the pool read-only from reflink copies.
 
 ### sde-wd-WCC4E7HP6U7J
 
