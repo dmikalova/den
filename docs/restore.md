@@ -373,6 +373,35 @@ When all the members that you can find are imaged, do these steps:
 5. Read the profiles: `sudo btrfs filesystem df /mnt/olddata`.
 6. Continue at step 7 of the steps above.
 
+### Mount result and inventory
+
+All 4 members imaged and sealed. The pool mounted read-only on the first
+try with `ro,rescue=nologreplay`. All 4 devices report the same transid
+128763 and 0 corruption errors. loop8 (devid 2, WD Red) still carries its
+old error counters from the 2019 server (1 write, 12 read), but no new
+checksum failures appeared at mount.
+
+Profiles are mixed. The pool holds both single and RAID5 block groups:
+
+- Data: single 3.42 TiB (used 3.21), RAID5 1.87 TiB (used 1.81).
+- Metadata: RAID1 5 GiB (used 3.76), RAID5 3.09 GiB (used 2.59).
+- System: RAID1 8 MiB.
+
+Total used about 5.64 TiB. The RAID5 groups span all 4 devices, so a
+missing member would need `degraded` and lose the RAID5 data. All 4 are
+present here.
+
+Top level (5.1 TiB, 448,993 files):
+
+| Top dir | Size | Dated | Main contents |
+| --- | --- | --- | --- |
+| `mess` | 3.2 TiB | Oct 2018 | music 911G, torrents 993G, videos 443G, Recovery 521G, Mess 167G, originals 69G, games 48G, books 38G |
+| `Torrents` | 1.8 TiB | Apr 2016 | Seeding 1.3T, Finished 443G |
+| `Plex` | 175 GiB | Jun 2016 | movies 100G, tv 72G, music 4.2G |
+| `Dropbox` | 4.1 GiB | Jul 2017 | Music 1.4G, Camera Uploads 1.2G, Apps, keys, Public |
+
+The root dir is dated 2017-01-02. There are no subvolumes.
+
 ## The old ZFS pool
 
 Three Seagate ST3000DM001 drives form a separate, older pool. ZFS, not
