@@ -430,6 +430,28 @@ The root dir is dated 2017-01-02. There are no subvolumes.
 - To get a partial copy of a damaged file, read it from `/mnt/olddata` with
   `dd conv=noerror,sync`. The bad extents become zeros.
 
+Salvage of the 4 damaged files (2026-10-28):
+
+1. `dd conv=noerror,sync` zeroed far too much: 252 of 1,116 blocks of the
+   JPEG. Readahead spreads 1 bad extent over many blocks. Do not use it.
+2. Remount with `ro,rescue=nologreplay,rescue=ignoredatacsums`. Read each
+   file in 4 KiB `pread` calls with `POSIX_FADV_RANDOM`
+   (`btrfs-salvage.log`). All 4 files read with 0 failed blocks. Then
+   remount with `ro,rescue=nologreplay` again.
+3. Decode test, then a search for intact copies in the restore:
+   - MKV: 1 bad block in the whole file. The copy in `Torrents/Seeding/` is
+     the same file and has no damage. Replaced with that copy.
+   - MP3: about 2 bad blocks. The copy in
+     `mess/Mess/music/Davids Mix v2/` is the same file and has no damage.
+     Replaced with that copy.
+   - FLAC: plays for about 86 s, then loses sync. Kept as is. An intact,
+     different rip of the same track is in
+     `mess/music/Music Mess/Mess Live FLAC/Björk 2003.05.24 London, Hammersmith ~/bjork2003-05-24d1t10.flac`
+     (44.1 kHz, passes `flac -t`).
+   - JPEG: no JPEG markers anywhere in the file. The full content is bad.
+     Renamed to `2016-06-16 16.10.50.jpg.damaged`. The original can still be
+     in the Dropbox account or a phone photo backup.
+
 ## The old ZFS pool
 
 Three Seagate ST3000DM001 drives form a separate, older pool. ZFS, not
@@ -752,6 +774,29 @@ Status:
 - 2026-10-28 05:30: imaging finished. 0 bad bytes, 0 read errors. SMART after
   is the same as before. The drive is detached. The seal is in progress.
 - Next: image `Z50055EX`. Then import the pool read-only from reflink copies.
+
+### sde-seagate-Z50055EX
+
+| | |
+| --- | --- |
+| Drive | Seagate ST3000DM001-1ER166, 3 TB, 7200 rpm, serial `Z50055EX` |
+| SMART | passed; 13,904 power-on hours, 31 power cycles, **8 reallocated**, 0 pending, 0 offline uncorrectable, **1 reported uncorrect**, 0 CRC |
+| Image | `/mnt/disk2/data/recover/sde-seagate-Z50055EX/image.img` (sparse) |
+| Files | `smart-before.txt`, `gpt.txt`, `zfs-label0.bin` |
+
+Findings:
+
+- Same layout as the other 2 members.
+- Label: pool GUID `5836723255957420361`, member GUID
+  `16215036456739540021`, state 0, txg 19,267,508, last uberblock
+  2016-03-28 15:09:43 UTC. All 3 members are consistent.
+
+Status:
+
+- 2026-10-28 09:04: started the image on disk2 with the
+  `recover-zfs-Z50055EX` unit. About 70 MB/s, 0 errors at 3%. First
+  estimate about 4.5 h. `seal-zfs-Z50055EX` detaches the drive and seals
+  the image after.
 
 ### sde-wd-WCC4E7HP6U7J
 
