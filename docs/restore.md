@@ -444,7 +444,8 @@ Salvage of the 4 damaged files (2026-10-28):
    - MP3: about 2 bad blocks. The copy in
      `mess/Mess/music/Davids Mix v2/` is the same file and has no damage.
      Replaced with that copy.
-   - FLAC: plays for about 86 s, then loses sync. Kept as is. An intact,
+   - FLAC: plays for about 86 s, then loses sync. Kept, and renamed to
+     `Bjork2003-05-24d1t10(Nature Is Ancient) [corrupted].flac`. An intact,
      different rip of the same track is in
      `mess/music/Music Mess/Mess Live FLAC/Björk 2003.05.24 London, Hammersmith ~/bjork2003-05-24d1t10.flac`
      (44.1 kHz, passes `flac -t`).
