@@ -402,6 +402,23 @@ Top level (5.1 TiB, 448,993 files):
 
 The root dir is dated 2017-01-02. There are no subvolumes.
 
+### Extraction
+
+- Target: `~/data/restore/btrfs-2016-2019/`, all 4 top dirs.
+- Tool: the `extract-btrfs` unit (`/tmp/extract-btrfs.sh`) runs
+  `rsync -aHAX` as root. rsync reads every byte, so btrfs verifies each
+  checksum. The copy is also the read scan.
+- Errors go to `/mnt/disk1/data/recover/btrfs-extract.err`. That file is the
+  list of damaged files.
+- Owners: 99.5% of entries are `dmikalova` (uid 1000 on the old server
+  too). About 2,380 entries, nearly all in `Torrents`, have uid 110 or 125.
+  These were old service accounts and do not exist on den. After the copy,
+  run `chown -R dmikalova:dmikalova` on the target. Keep the modes as they
+  are; every file has owner read and every dir has owner read and execute.
+- 2026-10-27 09:44: started. The rate is about 30–45 MB/s, because the pool
+  is RAID5 over loop images, and it starts with many small files.
+- Damaged so far: `Dropbox/Camera Uploads/2016-06-16 16.10.50.jpg` (EIO).
+
 ## The old ZFS pool
 
 Three Seagate ST3000DM001 drives form a separate, older pool. ZFS, not
@@ -435,6 +452,13 @@ gives the serials above.
 
 To check the other 2 members, read their labels first. A matching pool GUID
 and a txg near 19,267,508 mean the 3 disks are consistent.
+
+The label of `Z5006P1Z` has the same txg (19,267,508) and the same last
+uberblock time as `Z5006GSW`. So 2 of the 3 members are consistent. raidz1
+can import with these 2, even if `Z50055EX` is missing or reused.
+
+Run `zdb` containers with `--network host`. With the default podman network,
+`apt-get update` failed to download the index files.
 
 Run `zdb` in a container. Debian `zfsutils-linux` is in `contrib`. `zdb` is
 user space and does not need the kernel module.
@@ -686,8 +710,35 @@ Status:
 - 2026-10-26 23:34: started the image with the `recover-zfs-Z5006GSW` unit.
   Pass 1 (`-n`), then pass 2 (`-d -r3`). First estimate about 4.5 h.
   `seal-zfs-Z5006GSW` detaches the drive and seals the image after.
-- Next: image the other 2 members (`Z50055EX`, `Z5006P1Z`). Then import the
-  pool read-only from reflink copies.
+- 2026-10-27 09:50: imaging finished. 0 bad bytes, 0 read errors. SMART after
+  is the same as before: 0 reallocated, 0 pending.
+- 2026-10-27 15:27: sealed. SHA-256 `8a8af7e46d57849f…1415fb9b` in
+  `image.img.sha256`; `chmod 444` on the image, map, and hash file.
+
+### sde-seagate-Z5006P1Z
+
+| | |
+| --- | --- |
+| Drive | Seagate ST3000DM001-1ER166, 3 TB, 7200 rpm, serial `Z5006P1Z` |
+| SMART | passed; 13,904 power-on hours, 38 power cycles, 0 reallocated, 0 pending, 0 offline uncorrectable, 0 reported uncorrect, 0 CRC |
+| Image | `/mnt/disk1/data/recover/sde-seagate-Z5006P1Z/image.img` (sparse) |
+| Files | `smart-before.txt`, `gpt.txt`, `zfs-label0.bin` |
+
+Findings:
+
+- Same layout as `Z5006GSW`: GPT, part 1 `zfs`, part 9 reserved 8 MiB.
+- Label: pool `data`, pool GUID `5836723255957420361`, member GUID
+  `530566918894151287`, host `dmikalova-server`, state 0.
+- txg 19,267,508, last uberblock 2016-03-28 15:09:43 UTC. This is the same
+  as `Z5006GSW`.
+
+Status:
+
+- 2026-10-27 17:25: started the image on disk1 with the
+  `recover-zfs-Z5006P1Z` unit. The rate is about 94 MB/s, and the first
+  estimate is about 4.25 h. `seal-zfs-Z5006P1Z` detaches the drive and seals
+  the image after.
+- Next: image `Z50055EX`. Then import the pool read-only from reflink copies.
 
 ### sde-wd-WCC4E7HP6U7J
 
