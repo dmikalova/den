@@ -417,7 +417,18 @@ The root dir is dated 2017-01-02. There are no subvolumes.
   are; every file has owner read and every dir has owner read and execute.
 - 2026-10-27 09:44: started. The rate is about 30–45 MB/s, because the pool
   is RAID5 over loop images, and it starts with many small files.
-- Damaged so far: `Dropbox/Camera Uploads/2016-06-16 16.10.50.jpg` (EIO).
+- 2026-10-28 08:27: finished, rsync exit code 23 (some files not copied).
+  447,232 entries: 418,428 files, 28,334 dirs, 470 symlinks. 5.1 TiB.
+- 2026-10-28: `chown -R dmikalova:dmikalova` done. No entry has another
+  owner or group.
+- 4 files are damaged. Each read gave EIO, and rsync did not copy them. They
+  are not in the target:
+  - `Dropbox/Camera Uploads/2016-06-16 16.10.50.jpg`
+  - `mess/music/Music Mess/Davids Mix v2/[78] David - Baths - Maximalist.mp3`
+  - `mess/music/Music Mess/Mess Live FLAC/5-24-03 complete disk one/Bjork2003-05-24d1t10(Nature Is Ancient).flac`
+  - `mess/torrents/Seeding/Casino.Royale.2006.UnCut.720p.BluRay.DTS.x264-EbP.mkv`
+- To get a partial copy of a damaged file, read it from `/mnt/olddata` with
+  `dd conv=noerror,sync`. The bad extents become zeros.
 
 ## The old ZFS pool
 
@@ -738,6 +749,8 @@ Status:
   `recover-zfs-Z5006P1Z` unit. The rate is about 94 MB/s, and the first
   estimate is about 4.25 h. `seal-zfs-Z5006P1Z` detaches the drive and seals
   the image after.
+- 2026-10-28 05:30: imaging finished. 0 bad bytes, 0 read errors. SMART after
+  is the same as before. The drive is detached. The seal is in progress.
 - Next: image `Z50055EX`. Then import the pool read-only from reflink copies.
 
 ### sde-wd-WCC4E7HP6U7J
