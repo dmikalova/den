@@ -188,6 +188,73 @@ file "/srv/cache/models/paseo-work/" {
 	Depend => File["/srv/cache/paseo-work/cache/"],
 }
 
+# The vpn pod: gluetun holds the AirVPN tunnel, and qBittorrent and slskd have
+# no way out but through it. See docs/vpn.md.
+file "/home/dmikalova/.config/containers/systemd/vpn.pod" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/vpn.pod"),
+	mode => "0644",
+
+	Depend => File["/srv/cache/models/paseo-work/"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/gluetun.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/gluetun.container"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/vpn.pod"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/qbittorrent.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/qbittorrent.container"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/gluetun.container"],
+}
+
+file "/home/dmikalova/.config/containers/systemd/slskd.container" {
+	state => "exists",
+	content => deploy.readfile("/files/containers/systemd/slskd.container"),
+	mode => "0644",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/qbittorrent.container"],
+}
+
+# The bind mount sources. dmikalova owns /mnt/storage. The root layer makes
+# /srv/cache/slskd and gives it to this user.
+file "/srv/cache/slskd/incomplete/" {
+	state => "exists",
+
+	Depend => File["/home/dmikalova/.config/containers/systemd/slskd.container"],
+}
+
+file "/mnt/storage/downloads/" {
+	state => "exists",
+
+	Depend => File["/srv/cache/slskd/incomplete/"],
+}
+
+file "/mnt/storage/downloads/torrents/" {
+	state => "exists",
+
+	Depend => File["/mnt/storage/downloads/"],
+}
+
+file "/mnt/storage/downloads/soulseek/" {
+	state => "exists",
+
+	Depend => File["/mnt/storage/downloads/torrents/"],
+}
+
+# The music library. slskd shares it, read-only.
+file "/mnt/storage/music/" {
+	state => "exists",
+
+	Depend => File["/mnt/storage/downloads/soulseek/"],
+}
+
 exec "quadlets-v18" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
@@ -197,5 +264,5 @@ exec "quadlets-v18" {
     shell => "/bin/bash",
     creates => "/home/dmikalova/.local/state/den/quadlets-v18",
 
-	Depend => File["/srv/cache/models/paseo-work/"],
+	Depend => File["/mnt/storage/music/"],
 }

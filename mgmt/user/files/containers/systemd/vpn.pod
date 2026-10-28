@@ -1,0 +1,22 @@
+[Unit]
+Description=The vpn pod, whose only way out is the AirVPN tunnel
+# gluetun, qBittorrent and slskd share this pod's network namespace. gluetun
+# holds the tunnel and the firewall in it, so the apps have no route out that
+# does not go through AirVPN. See docs/vpn.md.
+ConditionPathExists=/run/den-env/gluetun.env
+
+[Pod]
+PodName=vpn
+# One user namespace for the whole pod. keep-id maps dmikalova to UID 1000,
+# so the apps run as UID 1000 without root and their files on den are owned
+# by dmikalova. Root in the pod, which gluetun needs for the tunnel, is a
+# subordinate ID of dmikalova and not dmikalova.
+UserNS=keep-id:uid=1000,gid=1000
+# gluetun's own resolver, which sends every query through the tunnel. The
+# default is the pasta resolver, which the gluetun firewall blocks.
+DNS=127.0.0.1
+# Loopback only. Caddy is the way in, at qbittorrent.den.mklv.tech and
+# slskd.den.mklv.tech. The gluetun firewall also has to let these ports in;
+# see FIREWALL_INPUT_PORTS in gluetun.container.
+PublishPort=127.0.0.1:8080:8080
+PublishPort=127.0.0.1:5030:5030

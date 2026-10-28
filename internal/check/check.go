@@ -94,7 +94,29 @@ func List(user string) []Check {
 		// Two instances of the agent orchestrator, personal and work.
 		{"paseo answering", `curl -fsS -o /dev/null http://127.0.0.1:6767/api/health`},
 		{"paseo-work answering", `curl -fsS -o /dev/null http://127.0.0.1:6768/api/health`},
+
+		// The vpn pod. A healthy tunnel is not enough: the point is that the
+		// apps leave through it, so each one is asked for its address and it
+		// must not be den's. See docs/vpn.md.
+		{
+			"vpn tunnel healthy",
+			`[ "$(podman inspect gluetun --format '{{.State.Health.Status}}')" = healthy ]`,
+		},
+		{"qbittorrent answering", `curl -sS -o /dev/null http://127.0.0.1:8080/`},
+		{"slskd answering", `curl -fsS -o /dev/null http://127.0.0.1:5030/health`},
+		{"qbittorrent egress is the vpn", egressNotHome("qbittorrent")},
+		{"slskd egress is the vpn", egressNotHome("slskd")},
 	}...)
+}
+
+// egressNotHome asks a container and den for their public addresses. Both
+// must answer, and the answers must differ. An empty answer fails, so a dead
+// tunnel is a failure and not a pass.
+func egressNotHome(container string) string {
+	const ip = "https://api.ipify.org"
+	return `home=$(curl -fsS -m 10 ` + ip + `) && ` +
+		`vpn=$(podman exec ` + container + ` wget -T 10 -qO- ` + ip + `) && ` +
+		`[ -n "$home" ] && [ -n "$vpn" ] && [ "$vpn" != "$home" ]`
 }
 
 // mounts checks that each area in the storage layout is mounted from its

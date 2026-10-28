@@ -1,0 +1,67 @@
+[Unit]
+Description=gluetun, the AirVPN tunnel of the vpn pod
+# The WireGuard keys and the forwarded ports are in this file. Without it
+# there is no tunnel, and the apps must not start. See docs/vpn.md.
+ConditionPathExists=/run/den-env/gluetun.env
+After=network-online.target
+Wants=network-online.target
+# The apps run while the tunnel runs. A restart of gluetun stops them (they
+# bind to this unit) and this starts them again.
+Upholds=qbittorrent.service slskd.service
+
+[Container]
+ContainerName=gluetun
+Pod=vpn.pod
+# Pinned. gluetun carries its own copy of the AirVPN server list, so a bump
+# is also how a new server reaches den.
+Image=docker.io/qmcgaw/gluetun:v3.41.3
+# keep-id in vpn.pod makes UID 1000 the default user. gluetun must be root to
+# set the firewall. This root is a subordinate ID of dmikalova on den.
+User=0:0
+# The tunnel and the firewall. Both are scoped to the pod's network
+# namespace, and the capability is in the pod's user namespace, not on den.
+AddCapability=NET_ADMIN
+# The userspace fallback, if the kernel has no wireguard module. Ubuntu's
+# kernel has it and loads it on demand when gluetun makes the interface.
+AddDevice=/dev/net/tun
+Environment=VPN_SERVICE_PROVIDER=airvpn
+Environment=VPN_TYPE=wireguard
+# AirVPN has no Seattle server. Vancouver is the nearest, with 6 WireGuard
+# servers. gluetun picks one at random and moves on if it fails.
+Environment=SERVER_CITIES=Vancouver
+# The web interfaces, from pasta on the pod side. The firewall blocks every
+# other port that does not come through the tunnel.
+Environment=FIREWALL_INPUT_PORTS=8080,5030
+# The default 1000 makes gluetun add a user to /etc/passwd, which is
+# read-only. Root is in the image already. Only OpenVPN uses this user.
+Environment=PUID=0
+Environment=PGID=0
+# The default directory, /tmp/gluetun, is made with mode 0644. Root cannot
+# enter it without CAP_DAC_OVERRIDE, which the shared hardening drops.
+Environment=PUBLICIP_FILE=/gluetun/ip
+# gluetun logs one error at each start, because it cannot write the
+# read-only /etc/resolv.conf. DNS= in vpn.pod already points it at gluetun.
+# WIREGUARD_PRIVATE_KEY, WIREGUARD_PRESHARED_KEY, WIREGUARD_ADDRESSES and
+# FIREWALL_VPN_INPUT_PORTS, the AirVPN forwarded ports. den-user-env.service
+# writes this file from the secrets path.
+EnvironmentFile=/run/den-env/gluetun.env
+# gluetun writes its server list and its state here. The list is in the
+# image, so nothing in it needs to survive a restart.
+Tmpfs=/gluetun:rw,nosuid,nodev,size=64m
+Tmpfs=/tmp:rw,nosuid,nodev,size=64m
+# The apps start only after the tunnel is up. The check fails until the
+# tunnel answers. It is the image HEALTHCHECK, which podman does not read
+# from this image.
+HealthCmd=/gluetun-entrypoint healthcheck
+HealthInterval=10s
+HealthRetries=3
+HealthStartPeriod=10s
+HealthTimeout=5s
+Notify=healthy
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

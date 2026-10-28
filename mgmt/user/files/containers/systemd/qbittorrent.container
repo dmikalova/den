@@ -1,0 +1,38 @@
+[Unit]
+Description=qBittorrent, behind the AirVPN tunnel
+# The profile is on /srv/appdata and the downloads are on the array. A missing
+# bind source would be made as an empty directory.
+RequiresMountsFor=/srv/appdata /mnt/storage
+ConditionPathExists=/run/den-env/qbittorrent.env
+# No tunnel, no torrents. gluetun.service starts this again when it is back.
+BindsTo=gluetun.service
+After=gluetun.service
+
+[Container]
+ContainerName=qbittorrent
+Pod=vpn.pod
+# Pinned. The lt1 build is libtorrent 1.2, which has the disk cache in RAM
+# that keeps random torrent writes off the array disks. libtorrent 2.0
+# removed it. Check the RED and OPS client allowlists before a bump.
+Image=docker.io/qbittorrentofficial/qbittorrent-nox:5.3.0-lt1-2
+# keep-id in vpn.pod maps dmikalova to UID 1000. As UID 1000 the entrypoint
+# needs no root and no chown, and the files on den are owned by dmikalova.
+User=1000:1000
+# The profile: settings, the torrent list and the resume data. qBittorrent
+# owns qBittorrent.conf and rewrites it, so mgmt does not write it.
+Volume=/srv/appdata/qbittorrent:/config
+Volume=/mnt/storage/downloads/torrents:/downloads
+Environment=QBT_LEGAL_NOTICE=confirm
+Environment=QBT_WEBUI_PORT=8080
+# QBT_TORRENTING_PORT, the AirVPN forwarded port for torrents.
+# den-user-env.service writes this file from the secrets path.
+EnvironmentFile=/run/den-env/qbittorrent.env
+Tmpfs=/tmp:rw,nosuid,nodev,size=64m
+
+[Service]
+Restart=always
+# A stop gives qBittorrent time to write the resume data.
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

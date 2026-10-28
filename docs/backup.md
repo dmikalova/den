@@ -28,6 +28,7 @@ designed to be run on a healthy host, on purpose, before the day they matter.
 | `/mnt/storage/recover` | no | **temporary**; raw images of old drives during extraction |
 | `/mnt/storage/restore` | no | **temporary**; files from old drives before validation; validated files move to `/mnt/storage/mess` |
 | `/mnt/storage/timemachine` | no | already a backup, and it churns; see [shares.md](shares.md) |
+| `/mnt/storage/downloads` | no | torrent and Soulseek downloads; re-downloadable; the music library is backed up; see [vpn.md](vpn.md) |
 | `/srv/cache` | no | model weights, images, build output; re-downloadable, so paying to store it twice is waste |
 | `node_modules/`, `.terraform/` | no | anywhere; reinstalled from a lockfile |
 

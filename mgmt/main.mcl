@@ -1131,3 +1131,16 @@ exec "den-user-env-units-v4" {
 
 	Depend => File["/etc/systemd/system/den-user-env.service"],
 }
+
+# The ground under the vpn pod. qBittorrent and slskd keep their settings on
+# /srv/appdata, which is backed up, and slskd keeps partial files on
+# /srv/cache, which is not. The user layer makes the rest. See docs/vpn.md.
+exec "vpn-dirs-v1" {
+	Meta:retry => 3,
+	Meta:delay => 15000,
+	cmd => "install -d -o dmikalova -g dmikalova -m 0755 /srv/appdata/qbittorrent /srv/appdata/slskd /srv/cache/slskd && touch /var/lib/den/vpn-dirs-v1",
+	shell => "/bin/bash",
+	creates => "/var/lib/den/vpn-dirs-v1",
+
+	Depend => Exec["den-user-env-units-v4"],
+}

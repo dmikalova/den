@@ -60,6 +60,18 @@ den.mklv.tech, *.den.mklv.tech {
 		reverse_proxy 127.0.0.1:6768
 	}
 
+	# The vpn pod publishes both. qBittorrent has its own password. slskd
+	# has none, like Beszel. See docs/vpn.md.
+	@qbittorrent host qbittorrent.den.mklv.tech
+	handle @qbittorrent {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	@slskd host slskd.den.mklv.tech
+	handle @slskd {
+		reverse_proxy 127.0.0.1:5030
+	}
+
 	# den.mklv.tech itself, and anything under it without an app.
 	handle {
 		root * /srv/www/den

@@ -1,0 +1,45 @@
+[Unit]
+Description=slskd, the Soulseek client, behind the AirVPN tunnel
+RequiresMountsFor=/srv/appdata /srv/cache /mnt/storage
+ConditionPathExists=/run/den-env/slskd.env
+# No tunnel, no Soulseek. gluetun.service starts this again when it is back.
+BindsTo=gluetun.service
+After=gluetun.service
+
+[Container]
+ContainerName=slskd
+Pod=vpn.pod
+# Pinned.
+Image=docker.io/slskd/slskd:0.26.2
+# keep-id in vpn.pod maps dmikalova to UID 1000. As UID 1000 the entrypoint
+# needs no root, and the files on den are owned by dmikalova.
+User=1000:1000
+# slskd.yml, the database and the logs.
+Volume=/srv/appdata/slskd:/app
+Volume=/mnt/storage/downloads/soulseek:/downloads
+# Partial files. slskd moves a file to /downloads when it is complete.
+Volume=/srv/cache/slskd/incomplete:/incomplete
+# The share. Soulseek users ban a client that shares nothing. Read-only, so
+# the share cannot change the library.
+Volume=/mnt/storage/music:/music:ro
+Environment=SLSKD_DOWNLOADS_DIR=/downloads
+Environment=SLSKD_INCOMPLETE_DIR=/incomplete
+Environment=SLSKD_SHARED_DIR=/music
+# No login form, for the same reason as Beszel: the port binds loopback and
+# Caddy admits the tailnet only.
+Environment=SLSKD_NO_AUTH=true
+# Caddy has the certificate.
+Environment=SLSKD_NO_HTTPS=true
+# SLSKD_SLSK_USERNAME, SLSKD_SLSK_PASSWORD and SLSKD_SLSK_LISTEN_PORT, the
+# AirVPN forwarded port for Soulseek. den-user-env.service writes this file
+# from the secrets path.
+EnvironmentFile=/run/den-env/slskd.env
+# .NET unpacks the app into /.net on each start.
+Tmpfs=/.net:rw,exec,nosuid,nodev,size=256m
+Tmpfs=/tmp:rw,nosuid,nodev,size=64m
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

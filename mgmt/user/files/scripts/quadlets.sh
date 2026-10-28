@@ -54,6 +54,16 @@ for app in paseo paseo-work; do
   fi
 done
 
+# The vpn pod has no tunnel without the AirVPN keys, and its units have a
+# condition on the env file. A restart of the pod stops every container in it
+# and starts them again on the new files, gluetun first.
+if [ -f /run/den-env/gluetun.env ]; then
+  systemctl --user reset-failed vpn-pod.service gluetun.service qbittorrent.service slskd.service || true
+  systemctl --user restart vpn-pod.service
+else
+  echo "quadlets: /run/den-env/gluetun.env is missing; the vpn pod starts at the next boot" >&2
+fi
+
 mkdir -p "${HOME}/.local/state/den"
 rm -f "${HOME}"/.local/state/den/quadlets-v*
 touch "${HOME}/.local/state/den/quadlets-v18"
