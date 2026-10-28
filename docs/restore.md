@@ -450,7 +450,8 @@ Salvage of the 4 damaged files (2026-10-28):
      `mess/music/Music Mess/Mess Live FLAC/Björk 2003.05.24 London, Hammersmith ~/bjork2003-05-24d1t10.flac`
      (44.1 kHz, passes `flac -t`).
    - JPEG: no JPEG markers anywhere in the file. The full content is bad.
-     Renamed to `2016-06-16 16.10.50.jpg.damaged`. The original can still be
+     Renamed to `2016-06-16 16.10.50 [corrupted].jpg.damaged`. The
+     `.damaged` suffix stops photo apps from importing it. The original can still be
      in the Dropbox account or a phone photo backup.
 
 ## The old ZFS pool
@@ -512,6 +513,76 @@ To image and read this pool:
    list what ZFS sees, then `-f` if it needs a force, still `readonly=on`.
 6. `zfs list`, then mount the datasets read-only and inventory to
    `~/data/restore/`.
+
+### Import result (2026-10-28)
+
+The host has the zfs 2.4.1 kernel module (Ubuntu DKMS) but no
+`zfsutils-linux`. The user-space tools run in a privileged
+`ubuntu:resolute` container named `zfsold`, so the versions match:
+
+```sh
+sudo podman run -d --name zfsold --privileged --network host \
+  -v /dev:/dev -v /mnt/zfsold:/mnt/zfsold:rshared ubuntu:resolute sleep infinity
+sudo podman exec zfsold sh -c 'apt-get update && apt-get install -y zfsutils-linux'
+sudo podman exec zfsold zpool import -d /dev/loop11p1 -d /dev/loop12p1 \
+  -o readonly=on -o cachefile=none -N -f -R /mnt/zfsold data
+sudo podman exec zfsold zfs mount -o ro data
+```
+
+- `-d <dir>` with symlinks to the loop partitions showed all members as
+  `UNAVAIL`. Give each partition with its own `-d`.
+- `rshared` makes the mount visible on the host at `/mnt/zfsold/mnt/data`.
+- Members: `Z5006GSW` = `loop11`, `Z5006P1Z` = `loop12`, both from reflink
+  `work.img`. `Z50055EX` is `UNAVAIL`, so the pool is `DEGRADED`.
+- 1 dataset, `data`, 4.45 TiB, no compression, no encryption, no
+  snapshots. Top level: `mess` 3.1T, `Torrents` 1.5T, `Dropbox` 5.9G.
+- `zpool history`: created 2014-08-10. Last import 2016-03-27.
+
+### Compare with the btrfs pool
+
+The btrfs pool is the successor of this pool. Almost all files are copied
+there. `rsync -rlni --size-only` from ZFS to `restore/btrfs-2016-2019/`
+listed 22,655 files that are not at the same path. Then a match by name
+and size against all btrfs files:
+
+| | Audio | Other |
+| --- | --- | --- |
+| Moved (same name and size on btrfs) | 14,214 | 5,587 |
+| Same size elsewhere | 152 | 7 |
+| Only on ZFS | 2,342 | 353 |
+
+- `mess/` is the same on both pools, `mess/Recovery` too.
+- The ZFS-only audio is mostly in `Torrents/Downloading`. Some files can
+  be incomplete downloads.
+- `.crashplan-backup-archives` (81 GiB) is only on ZFS. It is 1 CrashPlan
+  backup set for the `dmikalova@gmail.com` account, from 2014-08 to 2014-10,
+  encrypted with a private password.
+- No full-disk images of older failed drives exist on either pool. No
+  file is larger than 20 GiB.
+
+### ZFS extraction
+
+- The list is `recover/zfs-only.txt`: 2,854 files, 195 GiB. It has the
+  "only on ZFS" and "same size elsewhere" files.
+- `rsync -aHAX --files-from` to `~/data/restore/zfs-2014-2016/`, then
+  `chown -R dmikalova:dmikalova`.
+- Result: exit code 0, 2,854 files, 196 GiB. `zpool status`: 0 read, 0
+  checksum errors. The degraded pool read all needed data.
+
+### mess/Recovery
+
+`mess/Recovery` is the output of a 2013 recovery of older failed drives.
+The file names (`f<number>.<ext>`) show that PhotoRec carved them. Tags
+from a `mutagen` scan:
+
+| Folder | Files | Size | Full tags | No tags |
+| --- | --- | --- | --- | --- |
+| `flac/good` | 7,995 | 194 GiB | 7,467 | 407 |
+| `flac/bad` | 10,850 | 274 GiB | 10,303 | 366 (82 do not read) |
+| `mp3` | 7,596 | 51 GiB | 7,416 | 21 |
+
+"Full tags" means artist, album, and title. A tag tool like beets can sort
+these files into `Artist/Album/` folders.
 
 ## Drive log
 
@@ -774,7 +845,8 @@ Status:
   the image after.
 - 2026-10-28 05:30: imaging finished. 0 bad bytes, 0 read errors. SMART after
   is the same as before. The drive is detached. The seal is in progress.
-- Next: image `Z50055EX`. Then import the pool read-only from reflink copies.
+- 2026-10-28 11:04: the seal finished. SHA-256
+  `02356363a1cc015c92f8ad8eb184e8b5ba39ecf6a0d2e84e7704cc84887baca7`.
 
 ### sde-seagate-Z50055EX
 
@@ -798,6 +870,28 @@ Status:
   `recover-zfs-Z50055EX` unit. About 70 MB/s, 0 errors at 3%. First
   estimate about 4.5 h. `seal-zfs-Z50055EX` detaches the drive and seals
   the image after.
+- 09:45: the USB dock dropped the drive at 6.2% (186 GB). The cause was
+  the dock power, not the drive. ddrescue still exited 0, so the seal unit
+  sealed a partial image. The seal was undone (hash removed, `chmod 644`).
+- 10:51–11:03: on USB, the drive dropped 10–20 s after each spin-up.
+  `Z5006P1Z` worked in the same dock, so the drive looked faulty.
+- 11:09: on direct SATA (`ata8`), the drive is stable. SMART is the same
+  as before. The read at the stop point is clean.
+- 11:18: resumed with `recover-zfs-Z50055EX-resume`.
+- 12:32: stopped at 17.5%, 0 read errors. The pool imports degraded
+  from the other 2 members, and the extraction read all needed data with
+  0 errors. So this image is not needed. It is kept, not sealed. SMART
+  after was not saved.
+
+Lessons:
+
+- ddrescue exits 0 when the source device disappears. A seal unit must
+  check the map, not only the unit result. The resume seal used:
+  `grep -qE "^0x[0-9A-F]+ +0x[0-9A-F]+ +[^+]" image.map && exit 2`.
+- `systemctl stop` on a `podman run` unit can leave the container
+  running. Run `podman stop <name>` too.
+- If a drive drops on USB, test a known-good drive in the same dock, then
+  try direct SATA before you decide the drive is faulty.
 
 ### sde-wd-WCC4E7HP6U7J
 
