@@ -771,12 +771,12 @@ file "/etc/systemd/system/den-secrets.service" {
 # Enabled but not started here. The unit needs the sealed key to exist, which
 # `den apply` writes after this converge, and starting it before then would
 # fail on a host that is otherwise fine. Bump the version for a unit change.
-exec "den-secrets-units-v1" {
+exec "den-secrets-units-v2" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
-	cmd => "systemctl daemon-reload && systemctl enable den-secrets.service && touch /var/lib/den/den-secrets-units-v1",
+	cmd => "systemctl daemon-reload && systemctl enable den-secrets.service && rm -f /var/lib/den/den-secrets-units-v* && touch /var/lib/den/den-secrets-units-v2",
 	shell => "/bin/bash",
-	creates => "/var/lib/den/den-secrets-units-v1",
+	creates => "/var/lib/den/den-secrets-units-v2",
 
 	Depend => File["/etc/systemd/system/den-secrets.service"],
 }
@@ -797,7 +797,7 @@ exec "kopia-v1" {
 	shell => "/bin/bash",
 	creates => "/var/lib/den/kopia-v1",
 
-	Depend => Exec["den-secrets-units-v1"],
+	Depend => Exec["den-secrets-units-v2"],
 }
 
 file "/usr/local/bin/den-kopia" {

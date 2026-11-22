@@ -19,7 +19,27 @@ runuser -u dmikalova -- git -C /srv/den-config pull --ff-only
 # den-secrets only fetches at boot and then stays active, so a key added to the
 # secret in Secret Manager is invisible until a reboot. Reconcile is the drift
 # catcher, and a stale secret is drift.
-systemctl restart den-secrets.service
+#
+# A restart of den-secrets also restarts every unit that Requires= it, kopia
+# included, so restart only when the secret changed. The reload fetches into
+# /run/den/secrets in place, and the digest of that directory before and after
+# decides. A unit that already copied its credentials still holds the old
+# values, so a change still needs the restart.
+#
+# A reload fails on an inactive unit, or on one whose loaded file predates
+# ExecReload=. Both fall back to the restart, which is the old behaviour.
+secrets_digest() {
+	(cd /run/den/secrets 2>/dev/null && find . -type f -print0 | sort -z | xargs -0r sha256sum) | sha256sum
+}
+before="$(secrets_digest)"
+if systemctl is-active -q den-secrets.service && systemctl reload den-secrets.service; then
+	if [[ "$(secrets_digest)" != "$before" ]]; then
+		echo "den-secrets changed, restarting it and its dependents"
+		systemctl restart den-secrets.service
+	fi
+else
+	systemctl restart den-secrets.service
+fi
 
 cd /srv/den-config/mgmt
 # --no-autoedges is not an optimisation, it is required. Auto-edge computation
