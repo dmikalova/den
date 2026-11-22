@@ -255,14 +255,14 @@ file "/mnt/storage/music/" {
 	Depend => File["/mnt/storage/downloads/soulseek/"],
 }
 
-exec "quadlets-v18" {
+exec "quadlets-v19" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
     Meta:retry => 3,
     Meta:delay => 15000,
     cmd => deploy.readfile("/files/scripts/quadlets.sh"),
     shell => "/bin/bash",
-    creates => "/home/dmikalova/.local/state/den/quadlets-v18",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v19",
 
 	Depend => File["/mnt/storage/music/"],
 }
