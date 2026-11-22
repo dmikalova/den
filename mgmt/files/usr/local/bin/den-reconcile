@@ -4,6 +4,12 @@
 # converges as root.
 set -euo pipefail
 
+# The braces make bash read the whole script before it runs a line of it. mgmt
+# rewrites this file mid-run whenever it changes. Without the braces, bash then
+# reads on from its old byte offset into the new text and dies on a syntax
+# error, so the user layer never converges.
+{
+
 # One reconcile at a time. The daily timer and the CI apply can land together,
 # and two mgmt runs cannot share etcd's port on 2380: the loser dies on bind and
 # reports a failed deploy. Queue instead of exiting, because the run already in
@@ -68,3 +74,4 @@ exec runuser -u dmikalova -- env \
 	XDG_RUNTIME_DIR="/run/user/${uid}" \
 	mgmt run --no-autoedges --converger-timeout 30 --converged-exit \
 	--prefix /home/dmikalova/.local/state/mgmt lang ./metadata.yaml
+}
