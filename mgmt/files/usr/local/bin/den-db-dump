@@ -17,6 +17,10 @@
 #   systemctl start den-db-dump.service
 set -euo pipefail
 
+# comm needs the same byte order as sort. A locale collation can differ
+# between the two and make comm fail on sorted input.
+export LC_ALL=C
+
 src_root=/srv/appdata
 dst_root=/srv/db-dumps
 
