@@ -62,11 +62,14 @@ while IFS= read -r -d '' db; do
 
 	# The dump runs as the owner of the database. A root connection to a
 	# database in WAL mode can make a -shm file that the app cannot open.
+	# setpriv rather than runuser: runuser opens a PAM session, which writes
+	# two journal lines for each database.
+	as_owner=(setpriv --reuid="$owner" --regid="$group" --init-groups --)
 	install -d -o "$owner" -g "$group" -m 0750 "$dst_root/$app"
-	runuser -u "$owner" -- mkdir -p "$(dirname "$dst")"
+	"${as_owner[@]}" mkdir -p "$(dirname "$dst")"
 
 	tmp=$dst.tmp
-	if runuser -u "$owner" -- python3 -c "$backup_py" "$db" "$tmp"; then
+	if "${as_owner[@]}" python3 -c "$backup_py" "$db" "$tmp"; then
 		mv -f "$tmp" "$dst"
 		printf '%s\n' "$dst" >>"$new_manifest"
 		echo "dumped $db"
