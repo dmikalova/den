@@ -66,4 +66,4 @@ fi
 
 mkdir -p "${HOME}/.local/state/den"
 rm -f "${HOME}"/.local/state/den/quadlets-v*
-touch "${HOME}/.local/state/den/quadlets-v19"
+touch "${HOME}/.local/state/den/quadlets-v20"

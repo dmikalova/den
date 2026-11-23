@@ -1,6 +1,6 @@
 [Unit]
 Description=slskd, the Soulseek client, behind the AirVPN tunnel
-RequiresMountsFor=/srv/appdata /srv/cache /mnt/storage
+RequiresMountsFor=/srv/appdata /mnt/storage
 ConditionPathExists=/run/den-env/slskd.env
 # No tunnel, no Soulseek. gluetun.service starts this again when it is back.
 BindsTo=gluetun.service
@@ -17,13 +17,14 @@ User=1000:1000
 # slskd.yml, the database and the logs.
 Volume=/srv/appdata/slskd:/app
 Volume=/mnt/storage/downloads/soulseek:/downloads
-# Partial files. slskd moves a file to /downloads when it is complete.
-Volume=/srv/cache/slskd/incomplete:/incomplete
 # The share. Soulseek users ban a client that shares nothing. Read-only, so
 # the share cannot change the library.
 Volume=/mnt/storage/music:/music:ro
 Environment=SLSKD_DOWNLOADS_DIR=/downloads
-Environment=SLSKD_INCOMPLETE_DIR=/incomplete
+# Partial files, on the array and not on the NVMe. They are in the same bind
+# mount as /downloads, so the move of a complete file is a rename and not a
+# copy. Kopia and SnapRAID skip .incomplete. See docs/vpn.md.
+Environment=SLSKD_INCOMPLETE_DIR=/downloads/.incomplete
 Environment=SLSKD_SHARED_DIR=/music
 # No login form, for the same reason as Beszel: the port binds loopback and
 # Caddy admits the tailnet only.

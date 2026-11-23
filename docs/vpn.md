@@ -53,19 +53,37 @@ costs about 5% to 10% of the speed.
 
 Each app follows the [storage areas](storage.md).
 
-| Path in the container    | Path on den                       | Backup |
-| ------------------------ | --------------------------------- | ------ |
-| qBittorrent `/config`    | `/srv/appdata/qbittorrent`        | yes    |
-| qBittorrent `/downloads` | `/mnt/storage/downloads/torrents` | no     |
-| slskd `/app`             | `/srv/appdata/slskd`              | yes    |
-| slskd `/downloads`       | `/mnt/storage/downloads/soulseek` | no     |
-| slskd `/incomplete`      | `/srv/cache/slskd/incomplete`     | no     |
-| slskd `/music`           | `/mnt/storage/music`, read-only   | yes    |
+| Path in the container                | Path on den                                   | Kopia | SnapRAID |
+| ------------------------------------ | --------------------------------------------- | ----- | -------- |
+| qBittorrent `/config`                | `/srv/appdata/qbittorrent`                    | yes   | no       |
+| qBittorrent `/downloads`             | `/mnt/storage/downloads/torrents`             | yes   | yes      |
+| qBittorrent `/downloads/.incomplete` | `/mnt/storage/downloads/torrents/.incomplete` | no    | no       |
+| slskd `/app`                         | `/srv/appdata/slskd`                          | yes   | no       |
+| slskd `/downloads`                   | `/mnt/storage/downloads/soulseek`             | yes   | yes      |
+| slskd `/downloads/.incomplete`       | `/mnt/storage/downloads/soulseek/.incomplete` | no    | no       |
+| slskd `/music`                       | `/mnt/storage/music`, read-only               | yes   | yes      |
 
-Kopia does not back up `/mnt/storage/downloads`. The downloads can be fetched
-again. SnapRAID parity covers them, because a private torrent must stay to
-seed. Import the music that you keep into `/mnt/storage/music`, which Kopia
-backs up.
+Kopia backs up the complete downloads. A file from Soulseek can be hard to
+find again, because it depends on one user that is online and shares it. The
+rule that skips files that can be downloaded again is for files from a known
+source, such as model weights. It is not for downloads from peers.
+
+Kopia and SnapRAID do not back up the partial files in `.incomplete`. The
+partial files change at each write, and the client deletes them or moves them
+when the download is complete.
+
+The partial files are on the array, not on the NVMe. A large torrent does not
+use space on the NVMe. Each `.incomplete` directory is in the same bind mount
+as its complete files. Thus the move of a complete file is a rename in the
+mergerfs pool, not a copy.
+
+Snapper takes snapshots of the data disks, and it cannot skip a directory.
+A daily snapshot can hold a partial file. If you delete a partial download,
+its space comes back when the snapshot expires, after 3 months at most.
+
+A private torrent must stay in `downloads/torrents` to seed. Import the music
+that you keep into `/mnt/storage/music`. Kopia stores a file only once, so a
+copy in `downloads` and in `music` does not cost twice.
 
 slskd shares `/mnt/storage/music`. Soulseek users ban a client that shares
 nothing.
@@ -93,32 +111,65 @@ copies them into the `den-host` secret:
 | (both ports)         |                           | `AIRVPN_FORWARDED_PORTS`         | gluetun `FIREWALL_VPN_INPUT_PORTS`         |
 | `soulseek.sops.json` | `USERNAME`                | `SOULSEEK_USERNAME`              | slskd `SLSKD_SLSK_USERNAME`                |
 | `soulseek.sops.json` | `PASSWORD`                | `SOULSEEK_PASSWORD`              | slskd `SLSKD_SLSK_PASSWORD`                |
+| `airvpn.sops.json`   | `SPARE_PORTS`             | (none)                           | (none)                                     |
+
+`SPARE_PORTS` holds the 3 forwarded ports that no app uses yet. When an app
+uses one, move it to its own key, and add it to `AIRVPN_FORWARDED_PORTS`.
 
 Each unit in the pod has a condition on its env file. Until `den-user-env`
 writes the files, the pod does not start, and nothing fails.
 
+## Server city
+
+gluetun uses the AirVPN servers in Vancouver. In November 2026, a latency
+test from den's network put Vancouver first, San Jose second and Los Angeles
+third. AirVPN has 6 WireGuard servers in Vancouver.
+
+`SERVER_CITIES` in `gluetun.container` sets the city. gluetun picks a server
+at random from all the servers in the listed cities. It has no order of
+preference. If you add San Jose, gluetun uses a San Jose server as often as a
+Vancouver server. Thus the list has Vancouver only. If one Vancouver server
+fails, gluetun moves to a different Vancouver server.
+
+If all the Vancouver servers are down, change `SERVER_CITIES` to `San Jose`.
+The WireGuard keys are the same for all servers, so no secret changes.
+
 ## Set up AirVPN
 
-Buy the 3-day plan first. Test the speed and the forwarded ports before you
-buy the 3-year plan.
+The account is the 3-year plan.
 
-1. Buy the 3-day plan at <https://airvpn.org>.
+1. In the Client Area, open Devices. Add a device with the name `den`. Each
+   device has its own keys. You can revoke the keys of den and keep the keys
+   of your other devices.
 2. In the Client Area, open the Config Generator.
    1. Select Linux and WireGuard.
-   2. Select a server in Vancouver. gluetun uses Vancouver, because AirVPN
-      has no server in Seattle.
-   3. Generate the configuration. Do not download it to a shared folder.
-3. Copy these values from the configuration:
-   - `PrivateKey` is `WIREGUARD_PRIVATE_KEY`.
-   - `PresharedKey` is `WIREGUARD_PRESHARED_KEY`.
-   - `Address` is `WIREGUARD_ADDRESSES`. Use the IPv4 address only, for
-     example `10.150.20.30/32`. The pod has no IPv6.
-4. In the Client Area, open Ports. Add 2 ports. Each port forwards TCP and
-   UDP. Leave the local port empty, so it is the same as the remote port.
+   2. Select the device `den`.
+   3. Select any server. The keys are the same for all servers. gluetun
+      selects the server, and it has the public keys of the servers.
+   4. Generate the configuration. Do not download it to a shared folder.
+3. Copy these values from one `.conf` file:
+   - `PrivateKey`, in the `[Interface]` section, is `WIREGUARD_PRIVATE_KEY`.
+   - `PresharedKey`, in the `[Peer]` section, is `WIREGUARD_PRESHARED_KEY`.
+   - `Address`, in the `[Interface]` section, is `WIREGUARD_ADDRESSES`. Use
+     the IPv4 address only, for example `10.150.20.30/32`. The pod has no
+     IPv6.
+
+   The `Address` is also the IPv4 address on the device page. The public
+   key on the device page is not necessary.
+4. Delete the `.conf` files and the zip file.
+5. In the Client Area, open Ports. Add 5 ports, the maximum for one account.
+   For each port:
+   - Forward TCP and UDP.
+   - Leave the local port empty, so it is the same as the remote port.
+   - Set the device to `den`.
+6. Put the ports in `airvpn.sops.json`:
    - The first port is `TORRENT_PORT`.
    - The second port is `SOULSEEK_PORT`.
-5. Make a Soulseek user name and password. Soulseek makes the account at the
-   first login.
+   - The other 3 ports are `SPARE_PORTS`, a comma-separated list. No app uses
+     them yet.
+7. Make a Soulseek user name and password. These are the credentials of the
+   Soulseek network account, not of the slskd web UI. Soulseek makes the
+   account at the first login.
 
 ## Add the secrets
 
@@ -165,10 +216,12 @@ does not write it. Kopia backs up the file with the rest of
    `TORRENT_PORT`. `QBT_TORRENTING_PORT` sets it at each start.
 6. In Options, Downloads, make sure that the default save path is
    `/downloads`.
+7. In Options, Downloads, select "Keep incomplete torrents in", and set it
+   to `/downloads/.incomplete`. Kopia and SnapRAID skip this directory.
 
-## Test the trial
+## Test the tunnel
 
-Do these tests before the 3-day plan ends.
+Do these tests after the first start.
 
 1. Make sure that the egress checks pass:
 

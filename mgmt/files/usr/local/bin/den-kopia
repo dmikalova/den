@@ -118,9 +118,18 @@ kopia policy set --global \
 # here combined to store a second copy of a copy.
 kopia policy set /mnt/storage --add-ignore='/timemachine/'
 
-# Torrent and Soulseek downloads can be fetched again. What is worth keeping
-# is imported into /mnt/storage/music, which is backed up. See docs/vpn.md.
-kopia policy set /mnt/storage --add-ignore='/downloads/'
+# Finished torrent and Soulseek downloads are backed up. A Soulseek file can be
+# hard to find again: it depends on one user that is online and shares it.
+# The partial files are not backed up. They change at each write, and the
+# client deletes or moves them. See docs/vpn.md.
+kopia policy set /mnt/storage \
+	--add-ignore='/downloads/torrents/.incomplete/' \
+	--add-ignore='/downloads/soulseek/.incomplete/'
+
+# The policy is stored in the repository, so a rule deleted from this file
+# stays in force. This removes the old rule that skipped all of downloads.
+# Delete this line after the next backup.
+kopia policy set /mnt/storage --remove-ignore='/downloads/'
 
 # TEMPORARY. /mnt/storage/recover holds the drives being extracted from the old
 # array; it is a second copy of data that is already somewhere else, and paying

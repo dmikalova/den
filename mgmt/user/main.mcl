@@ -222,18 +222,11 @@ file "/home/dmikalova/.config/containers/systemd/slskd.container" {
 	Depend => File["/home/dmikalova/.config/containers/systemd/qbittorrent.container"],
 }
 
-# The bind mount sources. dmikalova owns /mnt/storage. The root layer makes
-# /srv/cache/slskd and gives it to this user.
-file "/srv/cache/slskd/incomplete/" {
-	state => "exists",
-
-	Depend => File["/home/dmikalova/.config/containers/systemd/slskd.container"],
-}
-
+# The bind mount sources. dmikalova owns /mnt/storage.
 file "/mnt/storage/downloads/" {
 	state => "exists",
 
-	Depend => File["/srv/cache/slskd/incomplete/"],
+	Depend => File["/home/dmikalova/.config/containers/systemd/slskd.container"],
 }
 
 file "/mnt/storage/downloads/torrents/" {
@@ -242,27 +235,41 @@ file "/mnt/storage/downloads/torrents/" {
 	Depend => File["/mnt/storage/downloads/"],
 }
 
-file "/mnt/storage/downloads/soulseek/" {
+# The partial files of qBittorrent. Kopia and SnapRAID skip .incomplete.
+file "/mnt/storage/downloads/torrents/.incomplete/" {
 	state => "exists",
 
 	Depend => File["/mnt/storage/downloads/torrents/"],
+}
+
+file "/mnt/storage/downloads/soulseek/" {
+	state => "exists",
+
+	Depend => File["/mnt/storage/downloads/torrents/.incomplete/"],
+}
+
+# The partial files of slskd.
+file "/mnt/storage/downloads/soulseek/.incomplete/" {
+	state => "exists",
+
+	Depend => File["/mnt/storage/downloads/soulseek/"],
 }
 
 # The music library. slskd shares it, read-only.
 file "/mnt/storage/music/" {
 	state => "exists",
 
-	Depend => File["/mnt/storage/downloads/soulseek/"],
+	Depend => File["/mnt/storage/downloads/soulseek/.incomplete/"],
 }
 
-exec "quadlets-v19" {
+exec "quadlets-v20" {
     # Three tries, then report. An exec that cannot succeed will never
     # succeed, and the default is to retry it until the unit times out.
     Meta:retry => 3,
     Meta:delay => 15000,
     cmd => deploy.readfile("/files/scripts/quadlets.sh"),
     shell => "/bin/bash",
-    creates => "/home/dmikalova/.local/state/den/quadlets-v19",
+    creates => "/home/dmikalova/.local/state/den/quadlets-v20",
 
 	Depend => File["/mnt/storage/music/"],
 }

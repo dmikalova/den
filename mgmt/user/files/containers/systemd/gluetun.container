@@ -29,6 +29,9 @@ Environment=VPN_TYPE=wireguard
 # AirVPN has no Seattle server. Vancouver is the nearest, with 6 WireGuard
 # servers. gluetun picks one at random and moves on if it fails.
 Environment=SERVER_CITIES=Vancouver
+# The MTU in the AirVPN WireGuard configuration. A larger MTU fragments
+# packets in the tunnel.
+Environment=WIREGUARD_MTU=1320
 # The web interfaces, from pasta on the pod side. The firewall blocks every
 # other port that does not come through the tunnel.
 Environment=FIREWALL_INPUT_PORTS=8080,5030
