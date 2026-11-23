@@ -6,7 +6,9 @@
 # The first backup therefore happens at the next 22:00 window, or sooner if
 # someone would rather watch it:
 #   systemctl start kopia-backup.service
+#
+# den-db-dump.service is not enabled. kopia-backup.service pulls it in.
 set -euo pipefail
 systemctl daemon-reload
 systemctl enable --now kopia-backup.timer kopia-restore-drill.timer
-touch /var/lib/den/kopia-units-v3
+touch /var/lib/den/kopia-units-v4

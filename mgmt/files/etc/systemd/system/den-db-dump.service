@@ -1,0 +1,16 @@
+[Unit]
+Description=Write consistent database dumps to /srv/db-dumps
+# No timer. kopia-backup.service wants this unit and starts after it, so the
+# dumps are always from the same run as the backup that carries them.
+RequiresMountsFor=/srv/appdata /srv/db-dumps
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/den-db-dump
+
+Nice=10
+IOSchedulingClass=idle
+
+# The databases are small. A dump that runs this long is stuck, and the backup
+# waits for it.
+TimeoutStartSec=30min

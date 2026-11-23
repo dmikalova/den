@@ -7,7 +7,9 @@
 # those show up in a successful upload, and all of them show up here.
 #
 # The drill restores the newest /srv/appdata snapshot into a scratch directory
-# and compares it with the live tree, then reads a sample of the repository's
+# and compares it with the live tree. It restores the newest /srv/db-dumps
+# snapshot and checks that each database dump opens and passes
+# integrity_check. Then it reads a sample of the repository's
 # actual bytes back out of Backblaze. It writes nothing outside its scratch
 # directory and never touches the live data.
 #
@@ -57,6 +59,39 @@ echo "   restored $files files"
 
 echo "== differences against the live tree (expected: files written since)"
 diff -rq "$work/restored" "$source" || true
+
+# The database dumps are what a restore uses for a database, so a file count
+# is not enough. Each dump must open and pass an integrity check. See
+# den-db-dump.
+dumps=/srv/db-dumps
+dump_snapshot=$(kopia snapshot list "$dumps" --json |
+	python3 -c 'import json,sys; s=json.load(sys.stdin); print(s[-1]["id"] if s else "")')
+[ -n "$dump_snapshot" ] || {
+	echo "no snapshot of $dumps to restore" >&2
+	exit 1
+}
+echo "== restoring $dump_snapshot"
+kopia snapshot restore "$dump_snapshot" "$work/dumps"
+
+checked=0
+while IFS= read -r -d '' db; do
+	header=
+	read -r -N 15 header <"$db" 2>/dev/null || true
+	[ "$header" = "SQLite format 3" ] || continue
+	python3 -c '
+import sqlite3, sys
+result = sqlite3.connect(sys.argv[1]).execute("PRAGMA integrity_check").fetchone()[0]
+sys.exit(0 if result == "ok" else sys.argv[1] + ": " + result)
+' "$db"
+	checked=$((checked + 1))
+done < <(find "$work/dumps" -type f -print0)
+
+# Beszel always has a database, so zero dumps means the dump never ran.
+[ "$checked" -gt 0 ] || {
+	echo "no database dumps in $dump_snapshot" >&2
+	exit 1
+}
+echo "   $checked database dumps pass integrity_check"
 
 # The restore above can be served entirely from the local cache, which proves
 # the cache and nothing else. This reads blobs back from Backblaze.

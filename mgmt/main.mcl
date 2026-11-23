@@ -808,12 +808,30 @@ file "/usr/local/bin/den-kopia" {
 	Depend => Exec["kopia-v1"],
 }
 
+# The database dumps that each backup carries. kopia-backup.service pulls the
+# unit in, so it has no timer of its own.
+file "/usr/local/bin/den-db-dump" {
+	state => "exists",
+	content => deploy.readfile("/files/usr/local/bin/den-db-dump"),
+	mode => "0755",
+
+	Depend => File["/usr/local/bin/den-kopia"],
+}
+
+file "/etc/systemd/system/den-db-dump.service" {
+	state => "exists",
+	content => deploy.readfile("/files/etc/systemd/system/den-db-dump.service"),
+	mode => "0644",
+
+	Depend => File["/usr/local/bin/den-db-dump"],
+}
+
 file "/etc/systemd/system/kopia-backup.service" {
 	state => "exists",
 	content => deploy.readfile("/files/etc/systemd/system/kopia-backup.service"),
 	mode => "0644",
 
-	Depend => File["/usr/local/bin/den-kopia"],
+	Depend => File["/etc/systemd/system/den-db-dump.service"],
 }
 
 file "/etc/systemd/system/kopia-backup.timer" {
@@ -851,12 +869,12 @@ file "/etc/systemd/system/kopia-restore-drill.timer" {
 }
 
 # Bump the version for a unit change; the sentinel is what makes this run once.
-exec "kopia-units-v3" {
+exec "kopia-units-v4" {
 	Meta:retry => 3,
 	Meta:delay => 15000,
 	cmd => deploy.readfile("/files/scripts/kopia-units.sh"),
 	shell => "/bin/bash",
-	creates => "/var/lib/den/kopia-units-v3",
+	creates => "/var/lib/den/kopia-units-v4",
 
 	Depend => File["/etc/systemd/system/kopia-restore-drill.timer"],
 }
@@ -874,7 +892,7 @@ file "/etc/samba/smb.conf" {
 	content => deploy.readfile("/files/etc/samba/smb.conf"),
 	mode => "0644",
 
-	Depend => Exec["kopia-units-v3"],
+	Depend => Exec["kopia-units-v4"],
 }
 
 file "/usr/local/bin/den-samba-user" {

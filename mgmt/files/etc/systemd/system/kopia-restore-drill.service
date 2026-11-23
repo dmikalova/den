@@ -3,7 +3,7 @@ Description=Prove den's kopia backup can be restored
 Wants=network-online.target
 After=network-online.target den-secrets.service kopia-backup.service
 Requires=den-secrets.service
-RequiresMountsFor=/srv/appdata
+RequiresMountsFor=/srv/appdata /srv/db-dumps
 
 [Service]
 Type=oneshot

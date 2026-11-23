@@ -1,0 +1,102 @@
+#!/bin/bash
+# Consistent database dumps for the offsite backup.
+#
+# kopia copies files while the apps run. A copy of a live SQLite file is only
+# crash consistent: a copy taken between a write to the database and its -wal
+# file can lose the last writes or fail to open. This script uses the SQLite
+# online backup API to write a consistent copy of each database in
+# /srv/appdata to /srv/db-dumps/<app>. kopia backs up both areas. A restore
+# uses the dump. See docs/storage.md and docs/backup.md.
+#
+# The script finds each database by its file header, so a new app needs no
+# change here. Postgres is not on den yet. Add its pg_dump to this script with
+# the first Postgres quadlet.
+#
+# Run by den-db-dump.service. kopia-backup.service pulls it in and starts after
+# it, so each backup carries dumps from the same run:
+#   systemctl start den-db-dump.service
+set -euo pipefail
+
+src_root=/srv/appdata
+dst_root=/srv/db-dumps
+
+# The dumps that the last run wrote. A dump whose database is gone is removed,
+# so the dumps stay a copy of the databases that exist.
+manifest=$dst_root/.sqlite-dumps
+
+# The online backup API copies the pages under a read lock and starts again
+# if a writer changes the source, so the copy is one point in time. The check
+# on the copy makes a bad dump fail here, not on the day of a restore.
+#
+# python3 rather than the sqlite3 CLI: python3 is on an Ubuntu server, and the
+# sqlite3 package is not.
+backup_py='
+import sqlite3, sys
+src = sqlite3.connect(sys.argv[1])
+dst = sqlite3.connect(sys.argv[2])
+src.backup(dst)
+result = dst.execute("PRAGMA integrity_check").fetchone()[0]
+dst.close()
+src.close()
+sys.exit(0 if result == "ok" else "integrity_check: " + result)
+'
+
+new_manifest=$(mktemp)
+trap 'rm -f "$new_manifest"' EXIT
+
+dumped=0
+failed=0
+
+while IFS= read -r -d '' db; do
+	# Every SQLite database starts with these 15 bytes. The -wal, -shm and
+	# -journal files do not.
+	header=
+	read -r -N 15 header <"$db" 2>/dev/null || true
+	[ "$header" = "SQLite format 3" ] || continue
+
+	rel=${db#"$src_root"/}
+	app=${rel%%/*}
+	dst=$dst_root/$rel
+	owner=$(stat -c %U "$db")
+	group=$(stat -c %G "$db")
+
+	# The dump runs as the owner of the database. A root connection to a
+	# database in WAL mode can make a -shm file that the app cannot open.
+	install -d -o "$owner" -g "$group" -m 0750 "$dst_root/$app"
+	runuser -u "$owner" -- mkdir -p "$(dirname "$dst")"
+
+	tmp=$dst.tmp
+	if runuser -u "$owner" -- python3 -c "$backup_py" "$db" "$tmp"; then
+		mv -f "$tmp" "$dst"
+		printf '%s\n' "$dst" >>"$new_manifest"
+		echo "dumped $db"
+		dumped=$((dumped + 1))
+	else
+		rm -f "$tmp"
+		echo "FAILED $db" >&2
+		failed=$((failed + 1))
+		# Keep the last good dump of a database that failed this time.
+		[ -f "$dst" ] && printf '%s\n' "$dst" >>"$new_manifest"
+	fi
+done < <(find "$src_root" -xdev \
+	\( -name .snapshots -o -name node_modules \) -prune -o \
+	-type f -size +0 -print0)
+
+if [ -f "$manifest" ]; then
+	comm -23 <(sort -u "$manifest") <(sort -u "$new_manifest") |
+		while IFS= read -r old; do
+			case $old in
+			"$dst_root"/*)
+				rm -f -- "$old"
+				echo "removed $old"
+				;;
+			esac
+		done
+fi
+sort -u "$new_manifest" >"$manifest"
+
+echo "$dumped dumped, $failed failed"
+
+# A failed dump fails the unit, and the global OnFailure drop-in sends the
+# alert. kopia-backup.service still runs, because it only wants this unit.
+[ "$failed" -eq 0 ]

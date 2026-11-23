@@ -43,9 +43,28 @@ cleanup steps are in [restore.md](restore.md).
 
 `/srv/db-dumps` is the `@db-dumps` subvolume on the NVMe. A
 copy of a running database in `/srv/db` is only crash consistent. A
-dump is consistent because it is taken on purpose. A service with a database
-writes its dump to `/srv/db-dumps` before `kopia-backup.timer` fires. Nothing does
-this yet.
+dump is consistent because it is taken on purpose.
+
+`kopia-backup.service` wants `den-db-dump.service` and starts after it.
+[den-db-dump](../mgmt/files/usr/local/bin/den-db-dump) finds each SQLite
+database in `/srv/appdata` by its file header. It writes a copy with the SQLite
+online backup API to `/srv/db-dumps/<app>/<path>`, and runs `integrity_check`
+on the copy. It removes the dump of a database that is gone. A failed dump
+sends an alert, and the backup still runs. A new app needs no change. Postgres
+is not on den yet. Add its `pg_dump` to `den-db-dump` with the first Postgres
+quadlet.
+
+The weekly drill restores the newest `/srv/db-dumps` snapshot and runs
+`integrity_check` on each dump. Zero dumps fail the drill.
+
+To restore a SQLite database, stop the app, copy the dump over the live file,
+delete the `-wal` and `-shm` files next to it, and start the app.
+
+To write the dumps now:
+
+```sh
+sudo systemctl start den-db-dump.service
+```
 
 ## Retention
 
